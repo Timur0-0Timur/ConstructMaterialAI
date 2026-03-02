@@ -6,6 +6,7 @@ Prototype of an internal tool for estimating physical volumes of construction ma
 ## Repository Structure
 - `backend/` — backend service
 - `ml-service/` — ML service
+- `data-service/` - data service
 - `docs/` — project documentation
 
 ## Team
