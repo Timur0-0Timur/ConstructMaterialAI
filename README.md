@@ -25,4 +25,3 @@ graph LR
     Python -->|Результат| Go
     Go -->|Ответ| Client
     ```
-
