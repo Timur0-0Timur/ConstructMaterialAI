@@ -24,4 +24,3 @@ graph LR
     Python -->|Загрузка модели| Model[ML Model]
     Python -->|Результат| Go
     Go -->|Ответ| Client
-    ```
