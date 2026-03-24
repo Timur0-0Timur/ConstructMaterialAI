@@ -15,3 +15,7 @@ Prototype of an internal tool for estimating physical volumes of construction ma
 - ML engineer
 - Data engineer
 - Generalist
+
+## Микросервисная архитектура
+<img width="1974" height="188" alt="mermaid-diagram-2026-03-23-210951" src="https://github.com/user-attachments/assets/02acf4d6-3e64-40c2-ad36-eacb20677b2e" />
+
