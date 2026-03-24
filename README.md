@@ -17,11 +17,12 @@ Prototype of an internal tool for estimating physical volumes of construction ma
 - Generalist
 
 ## Микросервисная архитектура
-```graph LR
+```mermaid
+graph LR
     Client[Клиент] -->|JSON| Go[Go Backend]
     Go -->|HTTP/gRPC| Python[Python ML Service<br/>FastAPI]
     Python -->|Загрузка модели| Model[ML Model]
     Python -->|Результат| Go
     Go -->|Ответ| Client
-    ```mermaid
+    ```
 
