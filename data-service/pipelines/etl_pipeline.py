@@ -228,7 +228,6 @@ class PumpETLPipeline:
 
         # новые параметры
         c_useful = self.config['feat_eng']['useful_kw']
-        c_specific = self.config['feat_eng']['specific_speed']
         c_diameter = self.config['feat_eng']['diameter_proxy']
         c_weight_log = self.config['feat_eng']['weight_log']
 
@@ -236,17 +235,12 @@ class PumpETLPipeline:
 
         # вспомогательные переменные для удобства
         s_head = df_merge[c_head].astype(float)
-        s_flow = df_merge[c_flow].astype(float)
         s_speed = df_merge[c_speed].astype(float)
 
         logger.info("Расчет инженерных признаков...")
 
         # вводим ПОЛЕЗНУЮ МОЩНОСТЬ (киловатт)
         df_merge[c_useful] = df_merge[c_head] * df_merge[c_flow]
-
-        # Удельная быстроходность
-        # определяет тип рабочего колеса (узкое/широкое)
-        df_merge[c_specific] = 3.65 * s_speed * np.sqrt(s_flow) / (np.power(s_head, 0.75) + 1e-6)
 
         # Геометрический фактор
         # Косвенная оценка диаметра рабочего колеса
@@ -257,9 +251,6 @@ class PumpETLPipeline:
         if invalid_power.sum() > 0:
             logger.warning(f"Найдено {invalid_power.sum()} строк с отрицательной мощностью. Удаляем.")
             df_merge = df_merge[~invalid_power]
-
-        # логарифмируем useful_kw
-        df_merge[c_useful] = np.log1p(df_merge[c_useful])
 
         cols_to_exclude = [c_weight_log, c_diameter]
         # логарифмирование новых признаков
