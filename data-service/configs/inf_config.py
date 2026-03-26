@@ -59,7 +59,6 @@ INFERENCE_CONFIG = {
     },
 
     "feat_eng": {
-        "specific_speed": "specific_speed",
         "diameter_proxy": "diameter_proxy",
         "useful_kw": "useful_kw",
         "weight_log": "weight_log"
