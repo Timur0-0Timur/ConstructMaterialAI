@@ -1,72 +1,73 @@
 import pandas as pd
 import numpy as np
 import logging
+from scipy.spatial.distance import cdist
+from scipy import stats
 
 logger = logging.getLogger(__name__)
 
 
 class PumpEnricher:
     """
-    Класс для восстановления пропущенных данных на основе
-    поиска ближайших аналогов в эталонном датасете.
+    Обогащение через K-ближайших соседей (K-NN).
+    - Использует K=3 для сглаживания ошибок базы.
+    - Разная логика для чисел и категорий.
     """
 
-    def __init__(self, search_features: list, target_features: list):
+    def __init__(self, search_features: list, target_features: list, k_neighbors: int = 3):
         self.search_features = search_features
         self.target_features = target_features
+        self.k = k_neighbors
 
     def enrich(self, df_real: pd.DataFrame, df_base: pd.DataFrame) -> pd.DataFrame:
-        logger.info(f"Запуск обогащения данных. Поиск по признакам: {self.search_features}")
-
+        logger.info(f"Запуск устойчивого обогащения (K={self.k})")
         df_result = df_real.copy()
 
-        # Переводим базовый датасет в numpy для скорости
-        # Оставляем только нужные колонки и убираем строки, где все поисковые фичи пустые
-        base_clean = df_base.dropna(subset=self.search_features)
-        base_values = base_clean[self.search_features].values
-        base_targets = base_clean[self.target_features].values
+        # 1. подготовка эталона
+        base_clean = df_base.dropna(subset=self.search_features).copy()
+        base_search_vals = base_clean[self.search_features].values
 
-        enriched_count = 0
+        # нормализация (Z-score)
+        means = base_search_vals.mean(axis=0)
+        stds = base_search_vals.std(axis=0) + 1e-9
+        base_norm = (base_search_vals - means) / stds
 
-        for i, row in df_result.iterrows():
-            # 1. Проверка на наличие данных для поиска
-            real_search_vals = row[self.search_features].values.astype(float)
-            mask = ~np.isnan(real_search_vals)
+        # 2. подготовка реальных данных
+        real_search_vals = df_result[self.search_features].values
+        mask_valid = ~np.any(np.isnan(real_search_vals), axis=1)
 
-            if not np.any(mask):
-                continue
+        if not np.any(mask_valid):
+            return df_result
 
-            # 2. Векторный расчет дистанций (NumPy)
-            # Считаем относительное отклонение: (Real - Base) / Base
-            # Используем только те колонки, которые есть в реальной строке (mask)
-            diff = (real_search_vals[mask] - base_values[:, mask]) / (base_values[:, mask] + 1e-9)
-            distances = np.sum(np.abs(diff), axis=1)
+        real_norm = (real_search_vals[mask_valid] - means) / stds
 
-            # 3. Находим лучшие совпадения
-            min_dist = np.min(distances)
-            best_indices = np.where(np.abs(distances - min_dist) < 1e-6)[0]
+        # 3. векторный поиск K соседей
+        distances = cdist(real_norm, base_norm, metric='euclidean')
 
-            # 4. Усреднение кандидатов и расчет коррекции (sumDevFrac)
-            # Берем среднее по найденным строкам в базе
-            avg_base_search = np.mean(base_values[best_indices], axis=0)
-            avg_base_targets = np.mean(base_targets[best_indices], axis=0)
+        # находим индексы K ближайших соседей для каждой строки
+        neighbor_indices = np.argpartition(distances, self.k, axis=1)[:, :self.k]
 
-            # Среднее относительное отклонение по известным признакам
-            # Это и есть наш коэффициент "насколько реальный насос больше/меньше эталона"
-            valid_diffs = (real_search_vals[mask] - avg_base_search[mask]) / (avg_base_search[mask] + 1e-9)
-            sum_dev_frac = np.mean(valid_diffs)
+        # 4. заполнение пропусков
+        valid_row_idx = 0
+        for i in range(len(df_result)):
+            if mask_valid[i]:
+                # индексы соседей в базе для данной строки
+                current_neighbors_idx = neighbor_indices[valid_row_idx]
+                neighbors_df = base_clean.iloc[current_neighbors_idx]
 
-            # 5. Заполнение пропусков
-            for j, target_f in enumerate(self.target_features):
-                # Заполняем только если в оригинале NaN
-                if pd.isna(row[target_f]):
-                    val_from_base = avg_base_targets[j]
+                for col in self.target_features:
+                    if pd.isna(df_result.at[i, col]):
+                        # логика: категории - по моде, физика - по среднему
+                        if col == 'spec_gravity':
+                            # берем самое частое значение (моду)
+                            val = neighbors_df[col].mode().iloc[0]
+                        else:
+                            # берем среднее значение
+                            val = neighbors_df[col].mean()
 
-                    if not np.isnan(val_from_base):
-                        # Применяем коррекцию
-                        calculated_val = val_from_base * (1.0 + sum_dev_frac)
-                        df_result.at[i, target_f] = calculated_val
-                        enriched_count += 1
+                        df_result.at[i, col] = val
 
-        logger.info(f"Обогащение завершено. Восстановлено значений: {enriched_count}")
+                valid_row_idx += 1
+
+        logger.info(f"Обогащение завершено (K={self.k}).")
         return df_result
