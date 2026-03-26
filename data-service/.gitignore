@@ -8,7 +8,7 @@
 
 # папки с данными
 data/
-datasets/
+datasets/dataset_inference.csv
 
 # кэш и временные файлы
 .cache/
