@@ -114,12 +114,15 @@ func ExcelHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 type PumpRequest struct {
-	Tag                  string   `json:"tag"`
-	LiquidFlowRateLS     *float64 `json:"liquid_flow_rate_ls,omitempty"`
-	FluidHeadM           *float64 `json:"fluid_head_m,omitempty"`
-	SpeedRPM             *float64 `json:"speed_rpm,omitempty"`
-	FluidSpecificGravity *float64 `json:"fluid_specific_gravity,omitempty"`
-	DriverPowerKW        *float64 `json:"driver_power_kw,omitempty"`
+	Tag       string   `json:"tag"`
+	FlowRate  *float64 `json:"flow_rate,omitempty"`  // обязательное
+	FluidHead *float64 `json:"fluid_head,omitempty"` // обязательное
+
+	// опциональные
+	RPM         *float64 `json:"rpm,omitempty"`
+	SpecGravity *float64 `json:"spec_gravity,omitempty"`
+	PowerKW     *float64 `json:"power_kw,omitempty"`
+	PumpEff     *float64 `json:"pump_eff,omitempty"`
 }
 
 func PumpHandler(w http.ResponseWriter, r *http.Request) {
@@ -142,6 +145,27 @@ func PumpHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if reqBody.Tag == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("Invalid request: missing tag"))
+		fmt.Println("missing tag")
+		return
+	}
+
+	if reqBody.FlowRate == nil || *reqBody.FlowRate <= 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("Invalid request: missing or invalid flow_rate"))
+		fmt.Println("missing/invalid flow_rate")
+		return
+	}
+
+	if reqBody.FluidHead == nil || *reqBody.FluidHead <= 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("Invalid request: missing or invalid fluid_head"))
+		fmt.Println("missing/invalid fluid_head")
+		return
+	}
+
 	payload, err := json.Marshal(reqBody)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -150,7 +174,7 @@ func PumpHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	endpoint := "http://192.168.1.151:8000/pump/estimate"
+	endpoint := "http://127.0.0.1:8000/pump/estimate"
 	httpReq, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
