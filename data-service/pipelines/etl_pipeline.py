@@ -5,6 +5,10 @@ import logging
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
+import sys
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+sys.path.append(str(BASE_DIR))
 
 from configs.config import CONFIG
 

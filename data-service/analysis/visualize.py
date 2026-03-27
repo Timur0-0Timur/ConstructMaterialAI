@@ -35,14 +35,14 @@ def plot_presentation_charts(raw_weight_path: str, ml_dataset_path: str):
     ax2.set_ylabel('Количество насосов')
 
     plt.tight_layout()
-    plt.savefig('01_weight_distribution.png', dpi=300, bbox_inches='tight')
+    plt.savefig('ds_ml_01_weight_distribution.png', dpi=300, bbox_inches='tight')
     print("Сохранен график: 01_weight_distribution.png")
     plt.close()
 
     # График 2: Feature Engineering
     fig2 = plt.figure(figsize=(10, 8))
 
-    sns.regplot(data=df_ml, x='useful_kw', y='weight_log',
+    sns.regplot(data=df_ml, x='useful_kw_log', y='weight_log',
                 scatter_kws={'alpha': 0.5, 's': 40, 'color': 'steelblue'},
                 line_kws={'color': 'darkorange', 'linewidth': 3})
 
@@ -51,24 +51,8 @@ def plot_presentation_charts(raw_weight_path: str, ml_dataset_path: str):
     plt.ylabel('Log(Вес насоса)')
 
     plt.tight_layout()
-    plt.savefig('02_feature_engineering.png', dpi=300, bbox_inches='tight')
+    plt.savefig('ds_ml_02_feature_engineering.png', dpi=300, bbox_inches='tight')
     print("Сохранен график: 02_feature_engineering.png")
-
-    fig25 = plt.figure(figsize=(10, 8))
-
-    sns.regplot(data=df_ml, x='head_flow_ratio', y='weight_log',
-                scatter_kws={'alpha': 0.5, 's': 40, 'color': 'steelblue'},
-                line_kws={'color': 'darkorange', 'linewidth': 3})
-
-    plt.title('Создание нового признака: Отношение напора к расходу', fontsize=18, fontweight='bold', pad=20)
-    plt.xlabel('Log(Отношение напора к расходу) [Напор / Расход]')
-    plt.ylabel('Log(Вес насоса)')
-
-    plt.tight_layout()
-    plt.savefig('02_2_feature_engineering.png', dpi=300, bbox_inches='tight')
-    print("Сохранен график: 02_2_feature_engineering.png")
-    plt.close()
-
 
     # График 3: матрица корреляций
     fig3 = plt.figure(figsize=(12, 10))
@@ -84,7 +68,7 @@ def plot_presentation_charts(raw_weight_path: str, ml_dataset_path: str):
     plt.title('Взаимосвязь параметров (Матрица корреляций)', fontsize=18, fontweight='bold', pad=20)
 
     plt.tight_layout()
-    plt.savefig('03_correlation_matrix.png', dpi=300, bbox_inches='tight')
+    plt.savefig('ds_ml_03_correlation_matrix.png', dpi=300, bbox_inches='tight')
     print("Сохранен график: 03_correlation_matrix.png")
     plt.close()
 
@@ -92,7 +76,7 @@ def plot_presentation_charts(raw_weight_path: str, ml_dataset_path: str):
 
 
 if __name__ == '__main__':
-    RAW_WEIGHT_CSV = 'data/.cache/tag_weight.csv'
-    ML_DATASET_CSV = 'datasets/dataset_ml.csv'
+    RAW_WEIGHT_CSV = '../data/.cache/tag_weight.csv'
+    ML_DATASET_CSV = '../datasets/dataset_ml.csv'
 
     plot_presentation_charts(RAW_WEIGHT_CSV, ML_DATASET_CSV)

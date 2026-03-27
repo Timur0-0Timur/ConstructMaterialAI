@@ -18,7 +18,7 @@ def generate_report(file_path='../datasets/dataset_inference.csv'):
     plt.title('Percentage of Missing Data (AFTER Enrichment)')
     plt.xlabel('% Missing')
     plt.tight_layout()
-    plt.savefig('missing_analysis.png')
+    plt.savefig('ds_inf_02_missing_analysis.png')
 
     # матрица корреляций
     plt.figure(figsize=(12, 10))
@@ -27,22 +27,13 @@ def generate_report(file_path='../datasets/dataset_inference.csv'):
     sns.heatmap(corr, annot=True, cmap='coolwarm', center=0, fmt='.2f')
     plt.title('Feature Correlation Matrix')
     plt.tight_layout()
-    plt.savefig('correlations.png')
-
-    # напор vs расход
-    plt.figure(figsize=(10, 6))
-    sns.scatterplot(data=df, x='flow_rate', y='fluid_head', alpha=0.6, color='blue')
-    sns.regplot(data=df, x='flow_rate', y='fluid_head', scatter=False, color='red')
-    plt.title('Pump Performance Mapping (Flow vs Head)')
-    plt.xlabel('Flow Rate (L/S)')
-    plt.ylabel('Fluid Head (M)')
-    plt.savefig('pump_performance.png')
+    plt.savefig('ds_inf_03_correlations.png')
 
     # распределение целевой переменной
     plt.figure(figsize=(8, 6))
     sns.histplot(df['weight_log'].dropna(), kde=True, color='purple')
     plt.title('Target Variable Distribution: log(Weight)')
-    plt.savefig('target_dist.png')
+    plt.savefig('ds_inf_01_target_dist.png')
 
     print("Графики для отчета успешно сгенерированы.")
 

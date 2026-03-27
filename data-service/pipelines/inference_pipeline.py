@@ -2,6 +2,10 @@ import pandas as pd
 import numpy as np
 import logging
 from pathlib import Path
+import sys
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+sys.path.append(str(BASE_DIR))
 
 from configs.inf_config import INFERENCE_CONFIG
 from pipelines.etl_pipeline import PumpETLPipeline
