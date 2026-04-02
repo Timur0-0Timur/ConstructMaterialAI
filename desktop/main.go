@@ -17,24 +17,18 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-// HTTP-КЛИЕНТ
-
 const backendURL = "http://localhost:8080/pump/estimate"
 
-// PumpRequest — структура данных, которую ожидает бэкенд
 type PumpRequest struct {
 	Tag       string   `json:"tag"`
-	FlowRate  *float64 `json:"flow_rate,omitempty"`  // обязательное
-	FluidHead *float64 `json:"fluid_head,omitempty"` // обязательное
+	FlowRate  *float64 `json:"flow_rate,omitempty"`
+	FluidHead *float64 `json:"fluid_head,omitempty"`
 
-	// опциональные
 	RPM         *float64 `json:"rpm,omitempty"`
 	SpecGravity *float64 `json:"spec_gravity,omitempty"`
 	PowerKW     *float64 `json:"power_kw,omitempty"`
-	PumpEff     *float64 `json:"pump_eff,omitempty"`
 }
 
-// sendToBackend — функция отправки данных о насосе на бэкенд
 func sendToBackend(data PumpRequest) (string, error) {
 	jsonBody, err := json.Marshal(data)
 	if err != nil {
@@ -60,8 +54,6 @@ func sendToBackend(data PumpRequest) (string, error) {
 	return string(body), nil
 }
 
-// ИНТЕРФЕЙС (UI)
-
 func runUI() {
 	fmt.Println("Инициализация интерфейса...")
 	myApp := app.New()
@@ -84,19 +76,13 @@ func showMainMenu(myWindow fyne.Window) {
 	})
 	pumpBtn.Importance = widget.HighImportance
 
-	vesselBtn := widget.NewButton("Vertical process vessel (в разработке)", func() {
-		// Заглушка
-	})
+	vesselBtn := widget.NewButton("Vertical process vessel (в разработке)", func() {})
 	vesselBtn.Disable()
 
-	drumBtn := widget.NewButton("Horizontal drum (в разработке)", func() {
-		// Заглушка
-	})
+	drumBtn := widget.NewButton("Horizontal drum (в разработке)", func() {})
 	drumBtn.Disable()
 
-	conveyorBtn := widget.NewButton("Belt conveyor open (в разработке)", func() {
-		// Заглушка
-	})
+	conveyorBtn := widget.NewButton("Belt conveyor open (в разработке)", func() {})
 	conveyorBtn.Disable()
 
 	content := container.NewVBox(
@@ -114,7 +100,6 @@ func showMainMenu(myWindow fyne.Window) {
 }
 
 func showPumpForm(myWindow fyne.Window) {
-	// Поля ввода
 	tagEntry := widget.NewEntry()
 	tagEntry.SetPlaceHolder("Напр.: Pump-123")
 
@@ -124,7 +109,6 @@ func showPumpForm(myWindow fyne.Window) {
 	headEntry := widget.NewEntry()
 	headEntry.SetPlaceHolder("Число (напр. 45.0)")
 
-	// Опциональные поля
 	rpmEntry := widget.NewEntry()
 	rpmEntry.SetPlaceHolder("Число (опционально)")
 
@@ -134,40 +118,30 @@ func showPumpForm(myWindow fyne.Window) {
 	powerEntry := widget.NewEntry()
 	powerEntry.SetPlaceHolder("Число (опционально)")
 
-	effEntry := widget.NewEntry()
-	effEntry.SetPlaceHolder("Число (опционально)")
-
-	// для статуса
 	statusLabel := widget.NewLabel("")
 	statusLabel.Alignment = fyne.TextAlignCenter
 
-	// Кнопка отправки
 	var submitBtn *widget.Button
 	submitBtn = widget.NewButtonWithIcon("Рассчитать", theme.ConfirmIcon(), func() {
-		// Собираем текст из полей
 		tagStr := tagEntry.Text
 		flowStr := flowEntry.Text
 		headStr := headEntry.Text
 
-		// Валидация на пустоту
 		if tagStr == "" || flowStr == "" || headStr == "" {
 			statusLabel.SetText("⚠ Заполните все обязательные поля!")
 			statusLabel.Refresh()
 			return
 		}
 
-		// Конвертация в числа (Flow и Head)
 		flow, errF := strconv.ParseFloat(flowStr, 64)
 		head, errH := strconv.ParseFloat(headStr, 64)
-
 		if errF != nil || errH != nil {
 			statusLabel.SetText("⚠ Ошибка: Расход и Напор должны быть числами!")
 			statusLabel.Refresh()
 			return
 		}
 
-		// Конвертация опциональных полей (если заполнены)
-		var rpm, specGravity, power, eff *float64
+		var rpm, specGravity, power *float64
 
 		parseOptional := func(s string) (*float64, error) {
 			if s == "" {
@@ -199,20 +173,12 @@ func showPumpForm(myWindow fyne.Window) {
 			statusLabel.Refresh()
 			return
 		}
-		eff, err = parseOptional(effEntry.Text)
-		if err != nil {
-			statusLabel.SetText("⚠ Ошибка: Efficiency должен быть числом!")
-			statusLabel.Refresh()
-			return
-		}
 
-		// Подготовка к отправке
 		submitBtn.Disable()
 		statusLabel.SetText("⏳ Выполняется расчет...")
 		statusLabel.Refresh()
 
 		go func() {
-			// Формируем запрос
 			data := PumpRequest{
 				Tag:         tagStr,
 				FlowRate:    &flow,
@@ -220,32 +186,26 @@ func showPumpForm(myWindow fyne.Window) {
 				RPM:         rpm,
 				SpecGravity: specGravity,
 				PowerKW:     power,
-				PumpEff:     eff,
 			}
 
-			// Отправляем
 			response, err := sendToBackend(data)
 
-			// Обработка результата
 			if err != nil {
 				statusLabel.SetText(fmt.Sprintf("✗ Ошибка: %s", err.Error()))
 			} else {
 				statusLabel.SetText(fmt.Sprintf("✓ Результат: %s", response))
 			}
 
-			// Обновляем UI
 			statusLabel.Refresh()
 			submitBtn.Enable()
 		}()
 	})
 	submitBtn.Importance = widget.HighImportance
 
-	// Кнопка назад
 	backBtn := widget.NewButtonWithIcon("Назад в меню", theme.NavigateBackIcon(), func() {
 		showMainMenu(myWindow)
 	})
 
-	// Форма
 	form := container.New(
 		layout.NewFormLayout(),
 		widget.NewLabel("Имя насоса (Tag):"), tagEntry,
@@ -254,10 +214,8 @@ func showPumpForm(myWindow fyne.Window) {
 		widget.NewLabel("Обороты (RPM):"), rpmEntry,
 		widget.NewLabel("Уд. вес (Spec Gravity):"), specGravityEntry,
 		widget.NewLabel("Мощность (Power kW):"), powerEntry,
-		widget.NewLabel("КПД (Efficiency):"), effEntry,
 	)
 
-	// Компоновка окна
 	content := container.NewVBox(
 		backBtn,
 		widget.NewLabel("Расчет характеристик насоса"),
