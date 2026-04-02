@@ -3,6 +3,11 @@ import datetime
 import logging
 from pathlib import Path
 from sqlalchemy import create_engine
+import sys
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+sys.path.append(str(BASE_DIR))
+
 from pipelines.etl_pipeline import PumpETLPipeline
 from features.enricher import PumpEnricher
 
