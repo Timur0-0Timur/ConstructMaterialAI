@@ -5,7 +5,6 @@ COL_NAMES = {
     "spec_gravity": "spec_gravity",
     "rpm": "rpm",
     "power_kw": "power_kw",
-    "pump_eff": "pump_eff",
     "weight_kg": "weight_kg"
 }
 

@@ -17,7 +17,6 @@ class PumpRequest(BaseModel):
     rpm: Optional[float] = Field(default=None, gt=0)
     spec_gravity: Optional[float] = Field(default=None, gt=0)
     power_kw: Optional[float] = Field(default=None, gt=0)
-    pump_eff: Optional[float] = Field(default=None, gt=0)
 
 class PumpResponse(BaseModel):
     model_version: str

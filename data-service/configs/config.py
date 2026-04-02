@@ -6,7 +6,6 @@ RAW_NAMES = {
         "speed": "Speed",
         "gravity": "Fluid specific gravity",
         "power": "Driver power",
-        "pump_eff": "Pump efficiency",
         "weight_kg": "Equip Weight",
         "tag_weight": "Tag No"
 }
@@ -19,7 +18,6 @@ COL_NAMES = {
     "rpm": "rpm",
     "gravity": "spec_gravity",
     "power_kw": "power_kw",
-    "pump_eff": "pump_eff",
     "weight_kg": "weight_kg"
 }
 
@@ -39,7 +37,6 @@ CONFIG = {
         RAW_NAMES['speed'],
         RAW_NAMES['gravity'],
         RAW_NAMES['power'],
-        RAW_NAMES['pump_eff'],
         RAW_NAMES['weight_kg'],
     ],
 
@@ -50,7 +47,6 @@ CONFIG = {
         RAW_NAMES["speed"]: COL_NAMES["rpm"],
         RAW_NAMES["gravity"]: COL_NAMES["gravity"],
         RAW_NAMES["power"]: COL_NAMES["power_kw"],
-        RAW_NAMES["pump_eff"]: COL_NAMES["pump_eff"],
         RAW_NAMES["weight_kg"]: COL_NAMES["weight_kg"]
     },
 

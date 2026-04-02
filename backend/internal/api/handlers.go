@@ -122,7 +122,6 @@ type PumpRequest struct {
 	RPM         *float64 `json:"rpm,omitempty"`
 	SpecGravity *float64 `json:"spec_gravity,omitempty"`
 	PowerKW     *float64 `json:"power_kw,omitempty"`
-	PumpEff     *float64 `json:"pump_eff,omitempty"`
 }
 
 func PumpHandler(w http.ResponseWriter, r *http.Request) {

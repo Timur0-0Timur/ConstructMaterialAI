@@ -224,7 +224,6 @@ class PumpETLPipeline:
 
     def _add_features(self, df_merge: pd.DataFrame, is_inference: bool = False) -> pd.DataFrame:
         """Генерация физических признаков"""
-        c_eff = self.config['col_names']['pump_eff']
         c_head = self.config['col_names']['head']
         c_flow = self.config['col_names']['flow']
         c_weight = self.config['col_names']['weight_kg']
@@ -284,7 +283,7 @@ class PumpETLPipeline:
                 df_merge[c_weight_log] = np.log(df_merge[c_weight].astype(float))
 
             # удаляем исходные колонки
-            df_merge = df_merge.drop(columns=[c_weight, c_eff], errors='ignore')
+            df_merge = df_merge.drop(columns=[c_weight], errors='ignore')
 
             # ставим weight_log в конец таблицы
             cols = df_merge.columns.tolist()

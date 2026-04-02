@@ -31,7 +31,6 @@ type PumpRequest struct {
 	RPM         *float64 `json:"rpm,omitempty"`
 	SpecGravity *float64 `json:"spec_gravity,omitempty"`
 	PowerKW     *float64 `json:"power_kw,omitempty"`
-	PumpEff     *float64 `json:"pump_eff,omitempty"`
 }
 
 // sendToBackend — функция отправки данных о насосе на бэкенд
@@ -134,9 +133,6 @@ func showPumpForm(myWindow fyne.Window) {
 	powerEntry := widget.NewEntry()
 	powerEntry.SetPlaceHolder("Число (опционально)")
 
-	effEntry := widget.NewEntry()
-	effEntry.SetPlaceHolder("Число (опционально)")
-
 	// для статуса
 	statusLabel := widget.NewLabel("")
 	statusLabel.Alignment = fyne.TextAlignCenter
@@ -167,7 +163,7 @@ func showPumpForm(myWindow fyne.Window) {
 		}
 
 		// Конвертация опциональных полей (если заполнены)
-		var rpm, specGravity, power, eff *float64
+		var rpm, specGravity, power *float64
 
 		parseOptional := func(s string) (*float64, error) {
 			if s == "" {
@@ -199,12 +195,6 @@ func showPumpForm(myWindow fyne.Window) {
 			statusLabel.Refresh()
 			return
 		}
-		eff, err = parseOptional(effEntry.Text)
-		if err != nil {
-			statusLabel.SetText("⚠ Ошибка: Efficiency должен быть числом!")
-			statusLabel.Refresh()
-			return
-		}
 
 		// Подготовка к отправке
 		submitBtn.Disable()
@@ -220,7 +210,6 @@ func showPumpForm(myWindow fyne.Window) {
 				RPM:         rpm,
 				SpecGravity: specGravity,
 				PowerKW:     power,
-				PumpEff:     eff,
 			}
 
 			// Отправляем
@@ -254,7 +243,6 @@ func showPumpForm(myWindow fyne.Window) {
 		widget.NewLabel("Обороты (RPM):"), rpmEntry,
 		widget.NewLabel("Уд. вес (Spec Gravity):"), specGravityEntry,
 		widget.NewLabel("Мощность (Power kW):"), powerEntry,
-		widget.NewLabel("КПД (Efficiency):"), effEntry,
 	)
 
 	// Компоновка окна
