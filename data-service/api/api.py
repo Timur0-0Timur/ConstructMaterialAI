@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional, Any, Dict
-from api.service import get_pump_estimation
+from .service import get_pump_estimation
 
 app = FastAPI(title="Pump Data/ML Service", version="1.0.0")
 
@@ -17,7 +17,6 @@ class PumpRequest(BaseModel):
     rpm: Optional[float] = Field(default=None, gt=0)
     spec_gravity: Optional[float] = Field(default=None, gt=0)
     power_kw: Optional[float] = Field(default=None, gt=0)
-    pump_eff: Optional[float] = Field(default=None, gt=0)
 
 class PumpResponse(BaseModel):
     model_version: str
