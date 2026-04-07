@@ -19,6 +19,7 @@ import (
 
 const backendURL = "http://localhost:8080/pump/estimate"
 
+// Структура JSON-запроса, который отправляется на backend
 type PumpRequest struct {
 	Tag       string   `json:"tag"`
 	FlowRate  *float64 `json:"flow_rate,omitempty"`
@@ -29,6 +30,7 @@ type PumpRequest struct {
 	PowerKW     *float64 `json:"power_kw,omitempty"`
 }
 
+// Отправка данных на backend и получение ответа
 func sendToBackend(data PumpRequest) (string, error) {
 	jsonBody, err := json.Marshal(data)
 	if err != nil {
@@ -54,6 +56,7 @@ func sendToBackend(data PumpRequest) (string, error) {
 	return string(body), nil
 }
 
+// Инициализация приложения и главного окна
 func runUI() {
 	fmt.Println("Инициализация интерфейса...")
 	myApp := app.New()
@@ -66,6 +69,7 @@ func runUI() {
 	myWindow.ShowAndRun()
 }
 
+// Главное меню выбора типа оборудования
 func showMainMenu(myWindow fyne.Window) {
 	label := widget.NewLabel("Выберите тип оборудования")
 	label.Alignment = fyne.TextAlignCenter
@@ -99,6 +103,7 @@ func showMainMenu(myWindow fyne.Window) {
 	myWindow.SetContent(container.NewPadded(content))
 }
 
+// Форма ввода параметров насоса
 func showPumpForm(myWindow fyne.Window) {
 	tagEntry := widget.NewEntry()
 	tagEntry.SetPlaceHolder("Напр.: Pump-123")
@@ -123,16 +128,19 @@ func showPumpForm(myWindow fyne.Window) {
 
 	var submitBtn *widget.Button
 	submitBtn = widget.NewButtonWithIcon("Рассчитать", theme.ConfirmIcon(), func() {
+		// Чтение обязательных полей
 		tagStr := tagEntry.Text
 		flowStr := flowEntry.Text
 		headStr := headEntry.Text
 
+		// Базовая проверка на пустые обязательные поля
 		if tagStr == "" || flowStr == "" || headStr == "" {
 			statusLabel.SetText("⚠ Заполните все обязательные поля!")
 			statusLabel.Refresh()
 			return
 		}
 
+		// Проверка и преобразование обязательных числовых значений
 		flow, errF := strconv.ParseFloat(flowStr, 64)
 		head, errH := strconv.ParseFloat(headStr, 64)
 		if errF != nil || errH != nil {
@@ -143,6 +151,7 @@ func showPumpForm(myWindow fyne.Window) {
 
 		var rpm, specGravity, power *float64
 
+		// Универсальный парсер для опциональных полей
 		parseOptional := func(s string) (*float64, error) {
 			if s == "" {
 				return nil, nil
@@ -154,6 +163,7 @@ func showPumpForm(myWindow fyne.Window) {
 			return &val, nil
 		}
 
+		// Проверка и преобразование опциональных параметров
 		var err error
 		rpm, err = parseOptional(rpmEntry.Text)
 		if err != nil {
@@ -174,10 +184,12 @@ func showPumpForm(myWindow fyne.Window) {
 			return
 		}
 
+		// Блокировка кнопки и запуск расчета
 		submitBtn.Disable()
 		statusLabel.SetText("⏳ Выполняется расчет...")
 		statusLabel.Refresh()
 
+		// Отправка запроса в отдельной goroutine, чтобы не блокировать UI
 		go func() {
 			data := PumpRequest{
 				Tag:         tagStr,
@@ -190,6 +202,7 @@ func showPumpForm(myWindow fyne.Window) {
 
 			response, err := sendToBackend(data)
 
+			// Обновление текста статуса по результату запроса
 			if err != nil {
 				statusLabel.SetText(fmt.Sprintf("✗ Ошибка: %s", err.Error()))
 			} else {
@@ -202,10 +215,12 @@ func showPumpForm(myWindow fyne.Window) {
 	})
 	submitBtn.Importance = widget.HighImportance
 
+	// Кнопка возврата в главное меню
 	backBtn := widget.NewButtonWithIcon("Назад в меню", theme.NavigateBackIcon(), func() {
 		showMainMenu(myWindow)
 	})
 
+	// Форма с полями ввода
 	form := container.New(
 		layout.NewFormLayout(),
 		widget.NewLabel("Имя насоса (Tag):"), tagEntry,
@@ -216,6 +231,7 @@ func showPumpForm(myWindow fyne.Window) {
 		widget.NewLabel("Мощность (Power kW):"), powerEntry,
 	)
 
+	// Общая компоновка окна формы
 	content := container.NewVBox(
 		backBtn,
 		widget.NewLabel("Расчет характеристик насоса"),
@@ -229,6 +245,7 @@ func showPumpForm(myWindow fyne.Window) {
 	myWindow.SetContent(container.NewPadded(content))
 }
 
+// Точка входа в приложение
 func main() {
 	fmt.Println("Запуск десктопного приложения...")
 	runUI()
