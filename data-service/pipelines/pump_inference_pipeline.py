@@ -10,7 +10,7 @@ from configs.inf_config import INFERENCE_CONFIG
 from pipelines.base_etl import BaseETLPipeline
 from domain.pump_features import PumpFeatureEngineer
 from utils.cleaners import vectorized_numeric_clean
-from features.enricher import PumpEnricher
+from utils.enricher import PumpEnricher
 
 logging.basicConfig(
     level=logging.INFO,
