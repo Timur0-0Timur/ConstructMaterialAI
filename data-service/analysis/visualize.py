@@ -24,13 +24,13 @@ def plot_presentation_charts(raw_weight_path: str, ml_dataset_path: str):
 
     # ДО
     sns.histplot(df_raw_weight['Equip Weight Clean'].dropna(), bins=50, kde=True, color='indianred', ax=ax1)
-    ax1.set_title('ДО: Исходное распределение веса (кг)\n(Смещение вправо, сложно для ML)', fontsize=14)
-    ax1.set_xlabel('Сырой вес (кг)')
+    ax1.set_title('ДО: Исходное распределение веса (кг)\n(Смещение вправо)', fontsize=14)
+    ax1.set_xlabel('Вес (кг)')
     ax1.set_ylabel('Количество насосов')
 
     # ПОСЛЕ
     sns.histplot(df_ml['weight_log'].dropna(), bins=50, kde=True, color='mediumseagreen', ax=ax2)
-    ax2.set_title('ПОСЛЕ: Логарифмированный вес\n(Нормальное распределение, идеально для ML)', fontsize=14)
+    ax2.set_title('ПОСЛЕ: Логарифмированный вес\n(Нормальное распределение)', fontsize=14)
     ax2.set_xlabel('Log(Вес)')
     ax2.set_ylabel('Количество насосов')
 
@@ -77,6 +77,6 @@ def plot_presentation_charts(raw_weight_path: str, ml_dataset_path: str):
 
 if __name__ == '__main__':
     RAW_WEIGHT_CSV = '../data/.cache/tag_weight.csv'
-    ML_DATASET_CSV = '../datasets/dataset_ml.csv'
+    ML_DATASET_CSV = '../datasets/pump_dataset_ml.csv'
 
     plot_presentation_charts(RAW_WEIGHT_CSV, ML_DATASET_CSV)

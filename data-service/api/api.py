@@ -18,7 +18,8 @@ class PumpRequest(BaseModel):
     spec_gravity: Optional[float] = Field(default=None, gt=0)
     power_kw: Optional[float] = Field(default=None, gt=0)
 
-class PumpResponse(BaseModel):
+# универсальный ответ
+class EstimationResponse(BaseModel):
     model_version: str
     weight: float
     debug_features: Dict[str, Any]
@@ -39,7 +40,7 @@ def pump_estimate(req: PumpRequest):
         result = get_pump_estimation(input_data)
 
         # 3. ответ пользователю
-        return PumpResponse(
+        return EstimationResponse(
             model_version=MODEL_VERSION,
             weight=result["weight"],
             debug_features=result["features"]

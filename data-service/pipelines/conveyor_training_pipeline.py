@@ -1,0 +1,63 @@
+import pandas as pd
+import logging
+from pathlib import Path
+import sys
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+sys.path.append(str(BASE_DIR))
+
+from configs.conveyor_config import CONVEYOR_CONFIG
+from pipelines.base_etl import BaseETLPipeline
+from domain.conveyor_features import ConveyorFeatureEngineer
+from utils.cleaners import vectorized_numeric_clean
+
+# настройка логгера
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
+
+class ConveyorTrainingPipeline(BaseETLPipeline):
+    """Пайплайн для обучения модели по конвейерам"""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.feature_engineer = ConveyorFeatureEngineer(self.config)
+
+    def transform(self, df_features: pd.DataFrame, df_weight: pd.DataFrame) -> pd.DataFrame:
+        raw = self.config['raw_names']
+        logger.info('Начало трансформации данных конвейера...')
+
+        # 1. объединение (Join)
+        df_merge = pd.merge(
+            df_features, df_weight,
+            left_on=raw['tag'], right_on=raw['tag_weight'], how='inner'
+        ).drop(raw['tag_weight'], axis=1, errors='ignore')
+
+        # 2. очистка через твою универсальную функцию
+        for col in self.config['cols_to_convert']:
+            df_merge[col] = vectorized_numeric_clean(df_merge[col])
+            df_merge[col] = pd.to_numeric(df_merge[col], errors='coerce')
+
+        # 3. удаление строк с пропусками
+        df_merge = df_merge.dropna(subset=self.config['cols_to_convert']).reset_index(drop=True)
+
+        # 4. переименование и физика
+        df_merge = df_merge.rename(columns=self.config['rename_map'])
+        df_merge = self.feature_engineer.add_conveyor_features(df_merge)
+
+        logger.info('Трансформация конвейеров завершена.\n')
+        return df_merge
+
+    def load(self, df: pd.DataFrame):
+        """Сохраняем под своим именем"""
+        super().load(df, filename='conveyor_dataset_ml.csv')
+
+if __name__ == '__main__':
+    pipeline = ConveyorTrainingPipeline(
+        input_file_path=BASE_DIR / 'data' / 'Belt conveyor-open.xlsx',
+        output_folder_path=BASE_DIR / 'datasets',
+        config=CONVEYOR_CONFIG
+    )
+    pipeline.run()
