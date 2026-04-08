@@ -1,31 +1,38 @@
 from pathlib import Path
-from pipelines.app_pipeline import PumpAppPipeline
+import logging
+
+# импортируем наш новый легковесный сервис вместо тяжелого пайплайна
+from pipelines.api_pipeline import EquipmentAPIService
 from configs.app_config import APP_CONFIG
+
+logger = logging.getLogger(__name__)
 
 # определяем пути
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATASETS_DIR = BASE_DIR / 'datasets'
 
-# инициализируем пайплайн
-app_pipeline = PumpAppPipeline(
+# инициализируем сервис
+pump_service = EquipmentAPIService(
     output_folder_path=DATASETS_DIR,
     config=APP_CONFIG
 )
 
-
 def get_pump_estimation(input_data: dict) -> dict:
-    """Прослойка между API и расчетами"""
-    # 1. прогоняем через пайплайн (очистка + энричинг + FE)
-    processed_features = app_pipeline.run_api_inference(input_data)
+    """Прослойка между API и расчетами для насосов"""
+    try:
+        # 1. прогоняем через пайплайн (очистка + энричинг + FE)
+        processed_features = pump_service.process_request(input_data)
 
-    # 2. ТУТ БУДЕТ ВЫЗОВ МОДЕЛИ
-    # Пока модели нет, мы просто имитируем её работу.
-    # Допустим, модель берет рассчитанный useful_kw_log и накидывает коэффициент
-    mock_weight = 100.0
-    if 'useful_kw_log' in processed_features:
-        mock_weight = processed_features['useful_kw_log'] * 50
+        # 2. ТУТ БУДЕТ ВЫЗОВ МОДЕЛИ
+        mock_weight = 100.0
+        if 'useful_kw_log' in processed_features:
+            mock_weight = processed_features['useful_kw_log'] * 50
 
-    return {
-        "weight": round(float(mock_weight), 2),
-        "features": processed_features  # возвращаем фичи для отладки
-    }
+        return {
+            "weight": round(float(mock_weight), 2),
+            "features": processed_features  # возвращаем фичи для отладки
+        }
+    except Exception as e:
+        logger.error(f"Ошибка в сервисе оценки насоса: {e}")
+        # прокидываем ошибку наверх, чтобы FastAPI мог вернуть понятный 400 статус
+        raise ValueError(f"Ошибка обработки данных: {str(e)}")
