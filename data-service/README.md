@@ -78,7 +78,7 @@ uvicorn api.api:app --reload
 ### 3. Пакетная обработка (Batch)
 Для генерации тренировочного датасета из всех файлов в папке `data`:
 ```bash
-python pipelines/etl_pipeline.py
+python pipelines/pump_training_pipeline.py
 ```
 
 ---

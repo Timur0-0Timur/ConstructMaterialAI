@@ -65,6 +65,6 @@ INFERENCE_CONFIG = {
     },
 
     "db_params": {
-        "table_prefix": "inference_data"
+        "table_prefix": "pump_inference_data"
     }
 }

@@ -5,7 +5,7 @@ import numpy as np
 from pathlib import Path
 
 
-def generate_report(file_path='../datasets/dataset_inference.csv'):
+def generate_report(file_path='../datasets/pump_dataset_inference.csv'):
     # загрузка и настройка стилей
     df = pd.read_csv(file_path)
     sns.set_theme(style="whitegrid")
