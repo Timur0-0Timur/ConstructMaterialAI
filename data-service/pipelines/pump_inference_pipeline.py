@@ -1,3 +1,4 @@
+# pipelines/pump_inference_pipeline.py
 import pandas as pd
 import logging
 from pathlib import Path
@@ -6,7 +7,7 @@ import sys
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.append(str(BASE_DIR))
 
-from configs.inf_config import INFERENCE_CONFIG
+from configs.config_loader import config
 from pipelines.base_etl import BaseETLPipeline
 from domain.pump_features import PumpFeatureEngineer
 from utils.cleaners import vectorized_numeric_clean
@@ -41,18 +42,18 @@ class PumpInferencePipeline(BaseETLPipeline):
         df_merge[raw['tag']] = df_merge[raw['tag']].fillna(df_merge[raw['weight_tag']])
         df_merge = df_merge.drop(columns=[raw['weight_tag']] + self.config['weight_col_to_drop'], errors='ignore')
 
-        # 2. очистка чисел
+        # 2. переименование
+        df_merge = df_merge.rename(columns=self.get_rename_map())
+
+        # 3. очистка чисел
         for col in self.config['cols_to_convert']:
             if col in df_merge.columns:
                 df_merge[col] = vectorized_numeric_clean(df_merge[col])
                 df_merge[col] = pd.to_numeric(df_merge[col], errors='coerce')
 
-        # 3. фильтрация
+        # 4. фильтрация
         critical_cols = [raw['flow'], raw['head']]
         df_merge = self.feature_engineer.filter_critical_data(df_merge, critical_cols)
-
-        # 4. переименование
-        df_merge = df_merge.rename(columns=self.config['rename_map'])
 
         # 5. обогащение (enriching)
         try:
@@ -79,10 +80,11 @@ class PumpInferencePipeline(BaseETLPipeline):
         super().load(df, filename=filename)
 
 if __name__ == '__main__':
+    pump_inf_config = config['equipment']['pump_inference']
     pipeline = PumpInferencePipeline(
         input_file_path=BASE_DIR / 'data' / 'Реальные насосные.xlsx',
         output_folder_path=BASE_DIR / 'datasets',
-        config=INFERENCE_CONFIG,
+        config=pump_inf_config,
         weight_file_path=BASE_DIR / 'data' / 'Реалные_насосные_альтернативный_лист_с_весом.xlsx'
     )
     pipeline.run()

@@ -3,7 +3,7 @@ import logging
 
 # импортируем наш новый легковесный сервис вместо тяжелого пайплайна
 from pipelines.api_pipeline import EquipmentAPIService
-from configs.app_config import APP_CONFIG
+from configs.config_loader import config
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +14,7 @@ DATASETS_DIR = BASE_DIR / 'datasets'
 # инициализируем сервис
 pump_service = EquipmentAPIService(
     output_folder_path=DATASETS_DIR,
-    config=APP_CONFIG
+    config=config['api']
 )
 
 def get_pump_estimation(input_data: dict) -> dict:

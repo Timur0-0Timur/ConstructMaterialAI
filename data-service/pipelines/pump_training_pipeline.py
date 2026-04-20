@@ -1,3 +1,4 @@
+# pipelines/pump_training_pipeline.py
 import pandas as pd
 import logging
 from pathlib import Path
@@ -6,7 +7,7 @@ import sys
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.append(str(BASE_DIR))
 
-from configs.config import CONFIG
+from configs.config_loader import config
 from pipelines.base_etl import BaseETLPipeline
 from domain.pump_features import PumpFeatureEngineer
 from utils.cleaners import vectorized_numeric_clean
@@ -36,18 +37,20 @@ class PumpTrainingPipeline(BaseETLPipeline):
             left_on=raw['tag'], right_on=raw['tag_weight'], how='inner'
         ).drop('Tag No', axis=1, errors='ignore')
 
-        # 2. очистка чисел
+        # 2. переименование и физика
+        df_merge = df_merge.rename(columns=self.get_rename_map())
+
+        # 3. очистка чисел
         for col in self.config['cols_to_convert']:
             df_merge[col] = vectorized_numeric_clean(df_merge[col])
             df_merge[col] = pd.to_numeric(df_merge[col], errors='coerce')
 
-        # 3. удаление мусора и валидация
+        # 4. удаление мусора и валидация
         df_merge = df_merge.dropna(subset=self.config['cols_to_convert']).reset_index(drop=True)
         critical_cols = [raw['flow'], raw['head']]
         df_merge = self.feature_engineer.filter_critical_data(df_merge, critical_cols)
 
-        # 4. переименование и физика
-        df_merge = df_merge.rename(columns=self.config['rename_map'])
+        # 5. физика
         df_merge = self.feature_engineer.add_physics_features(df_merge, is_inference=False)
 
         logger.info('Трансформация (обучение) завершена.\n')
@@ -58,9 +61,10 @@ class PumpTrainingPipeline(BaseETLPipeline):
         super().load(df, filename='pump_dataset_ml.csv')
 
 if __name__ == '__main__':
+    pump_ml_config = config['equipment']['pump_ml']
     pipeline = PumpTrainingPipeline(
         input_file_path=BASE_DIR / 'data' / 'Data.xlsx',
         output_folder_path=BASE_DIR / 'datasets',
-        config=CONFIG
+        config=pump_ml_config
     )
     pipeline.run()

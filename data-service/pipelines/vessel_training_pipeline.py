@@ -1,3 +1,4 @@
+# pipelines/vessel_training_pipeline.py
 import pandas as pd
 import logging
 from pathlib import Path
@@ -6,7 +7,7 @@ import sys
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.append(str(BASE_DIR))
 
-from configs.vessel_config import VESSEL_CONFIG
+from configs.config_loader import config
 from pipelines.base_etl import BaseETLPipeline
 from domain.vessel_features import VesselFeatureEngineer
 from utils.cleaners import vectorized_numeric_clean
@@ -29,17 +30,19 @@ class VesselTrainingPipeline(BaseETLPipeline):
             left_on=raw['tag'], right_on=raw['tag_weight'], how='inner'
         ).drop(raw['tag_weight'], axis=1, errors='ignore')
 
-        # 2. очистка чисел
+        # 2. переименование
+        df_merge = df_merge.rename(columns=self.get_rename_map())
+
+        # 3. очистка чисел
         for col in self.config['cols_to_convert']:
             df_merge[col] = vectorized_numeric_clean(df_merge[col])
             df_merge[col] = pd.to_numeric(df_merge[col], errors='coerce')
 
-        # 3. валидация
+        # 4. валидация
         critical = [raw['diameter'], raw['ss_dist']]
         df_merge = self.feature_engineer.filter_critical_data(df_merge, critical)
 
-        # 4. переименование и физика
-        df_merge = df_merge.rename(columns=self.config['rename_map'])
+        # 5. физика
         df_merge = self.feature_engineer.add_vessel_features(df_merge)
 
         return df_merge
@@ -48,9 +51,10 @@ class VesselTrainingPipeline(BaseETLPipeline):
         super().load(df, filename='vessel_dataset_ml.csv')
 
 if __name__ == '__main__':
+    vessel_ml_config = config['equipment']['vessel_ml']
     pipeline = VesselTrainingPipeline(
         input_file_path=BASE_DIR / 'data' / 'dataset_v_vessel_ml.xlsx',
         output_folder_path=BASE_DIR / 'datasets',
-        config=VESSEL_CONFIG
+        config=vessel_ml_config
     )
     pipeline.run()
