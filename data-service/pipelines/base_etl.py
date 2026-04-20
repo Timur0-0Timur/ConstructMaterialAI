@@ -1,9 +1,11 @@
+# pipelines/base_etl.py
 import pandas as pd
 from pathlib import Path
 import logging
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
+from configs.config_loader import config as global_config
 
 logger = logging.getLogger(__name__)
 
@@ -15,20 +17,31 @@ class BaseETLPipeline:
         self.output_folder = Path(output_folder_path)
         self.config = config
 
-    def extract(self) -> tuple[pd.DataFrame, pd.DataFrame]:
-        """безопасное чтение данных с кэшированием в csv"""
-        logger.info(f"чтение данных (источник: {self.input_file})...")
+    def extract(self) -> tuple[pd.DataFrame, pd.DataFrame | None]:
+        """Безопасное чтение данных с кэшированием в csv (умная версия)"""
+        logger.info(f"Чтение данных (источник: {self.input_file})...")
         input_dir = self.input_file.parent
         cache_dir = input_dir / '.cache'
         cache_dir.mkdir(parents=True, exist_ok=True)
 
+        features_sheet = self.config['sheets'].get('features')
+        weight_sheet = self.config['sheets'].get('weight')
+
+        # 1. читаем основной лист с фичами
         df_features = self._read_with_cache(
-            self.input_file, self.config['sheets']['features'], cache_dir, "features"
+            self.input_file, features_sheet, cache_dir, "features"
         )
-        df_weight = self._read_with_cache(
-            self.weight_file, self.config['sheets'].get('weight'), cache_dir, "weight"
-        )
-        logger.info("данные успешно загружены.\n")
+
+        # 2. проверка: нужно ли читать второй раз?
+        if not weight_sheet or (self.input_file == self.weight_file and features_sheet == weight_sheet):
+            logger.info("Данные о характеристиках и весе находятся в одном источнике. Второе чтение не требуется.")
+            df_weight = None
+        else:
+            df_weight = self._read_with_cache(
+                self.weight_file, weight_sheet, cache_dir, "weight"
+            )
+
+        logger.info("Данные успешно загружены.\n")
         return df_features, df_weight
 
     def _read_with_cache(self, excel_path: Path, sheet_name: str | int | None, cache_dir: Path, suffix: str) -> pd.DataFrame:
@@ -60,8 +73,32 @@ class BaseETLPipeline:
                 target_sheet = sheet_name if sheet_name else 0
                 logger.info(f"Читаем Excel файл {excel_path.name} (лист: {target_sheet})...")
 
+                header_param = self.config['sheets'].get('header', 0)
+
                 # читаем лист с xlsx
-                df_excel = pd.read_excel(excel_path, sheet_name=target_sheet)
+                df_excel = pd.read_excel(excel_path, sheet_name=target_sheet, header=header_param)
+
+                if isinstance(df_excel.columns, pd.MultiIndex):
+                    flattened_cols = []
+                    for col_tuple in df_excel.columns:
+                        lvl0 = str(col_tuple[0]).strip()
+                        lvl1 = str(col_tuple[1]).strip()
+
+                        # проверка: является ли этаж "нормальным"
+                        def is_valid_name(name):
+                            return bool(name) and 'Unnamed' not in name and name.lower() != 'nan'
+
+                        # логика приоритета
+                        if is_valid_name(lvl0):
+                            final_name = lvl0
+                        elif is_valid_name(lvl1):
+                            final_name = lvl1
+                        else:
+                            final_name = f"Empty_Col_{len(flattened_cols)}"
+
+                        flattened_cols.append(final_name)
+
+                    df_excel.columns = flattened_cols
 
                 logger.info(f"Создаем/обновляем CSV-кэш: {cache_file.name}")
 
@@ -105,15 +142,6 @@ class BaseETLPipeline:
         logger.info('Подключение к базе данных Neon...')
 
         table_prefix = self.config['db_params']['table_prefix']
-        # находим файл .env
-        base_dir = Path(__file__).resolve().parent.parent
-        env_path = base_dir / '.env'
-
-        # загружаем переменные из .env
-        if env_path.exists():
-            load_dotenv(dotenv_path=env_path)
-        else:
-            logger.warning(f"Файл {env_path} не найден! Убедитесь, что он существует.")
 
         # достаем данные из .env
         db_host = os.getenv('DB_HOST')
@@ -142,10 +170,17 @@ class BaseETLPipeline:
             logger.error(f"ОШИБКА при записи в БД: {e}")
 
     def run(self):
-        """главный метод, запуск конвейера по очереди"""
+        """Главный метод, запуск конвейера по очереди"""
         logger.info('\n--- ЗАПУСК ETL ПАЙПЛАЙНА ---')
         df_features, df_weight = self.extract()
         df_transformed = self.transform(df_features, df_weight)
         self.load(df_transformed)
         self.load_to_db(df_transformed)
         logger.info('ETL пайплайн завершен.')
+
+    def get_rename_map(self) -> dict:
+        """Автоматически собирает словарь для переименования колонок"""
+        raw = self.config.get('raw_names', {})
+        cols = self.config.get('col_names', {})
+
+        return {raw[k]: cols[k] for k in raw.keys() if k in cols}
