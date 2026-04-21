@@ -33,8 +33,8 @@ const (
 var equipmentTypes = []string{
 	"Насосы",
 	"Конвейер",
-	"Vertical process vessel",
-	"Horizontal drum",
+	"Вертикальный аппарат",
+	"Горизонтальная емкость",
 }
 
 // ─── Модели данных ───────────────────────────────────────────
@@ -269,7 +269,7 @@ func sendEquipmentToBackend(eq Equipment) (float64, error) {
 		}
 		return sendConveyorToBackend(req)
 
-	case "Vertical process vessel":
+	case "Вертикальный аппарат":
 		req := VesselRequest{
 			Tag:                          eq.Tag,
 			VesselDiameter:               eq.VesselDiameter,
@@ -277,7 +277,7 @@ func sendEquipmentToBackend(eq Equipment) (float64, error) {
 		}
 		return sendVesselToBackend(req)
 
-	case "Horizontal drum":
+	case "Горизонтальная емкость":
 		req := DrumRequest{
 			Tag:                          eq.Tag,
 			VesselDiameter:               eq.VesselDiameter,
@@ -320,6 +320,8 @@ func saveProjects(data AppData) error {
 
 func parseOptionalFloat(s string) (*float64, error) {
 	s = strings.TrimSpace(s)
+	// Заменяем запятую на точку для поддержки обоих форматов ввода
+	s = strings.ReplaceAll(s, ",", ".")
 	if s == "" {
 		return nil, nil
 	}
@@ -418,7 +420,7 @@ func (r *equipmentRow) collectEquipment() (Equipment, error) {
 		}
 		eq.BeltWidth = beltWidth
 
-	case "Vertical process vessel":
+	case "Вертикальный аппарат":
 		vesselDiameter, err := parseOptionalFloat(r.vesselDiameterEntry.Text)
 		if err != nil || vesselDiameter == nil {
 			return eq, fmt.Errorf("диаметр аппарата (Vessel Diameter) обязателен")
@@ -431,7 +433,7 @@ func (r *equipmentRow) collectEquipment() (Equipment, error) {
 		}
 		eq.VesselTangentToTangentHeight = vesselHeight
 
-	case "Horizontal drum":
+	case "Горизонтальная емкость":
 		vesselDiameter, err := parseOptionalFloat(r.vesselDiameterEntry.Text)
 		if err != nil || vesselDiameter == nil {
 			return eq, fmt.Errorf("диаметр аппарата (Vessel Diameter) обязателен")
@@ -647,59 +649,59 @@ func showProject(w fyne.Window, projectName string) {
 		row.headEntry.SetPlaceHolder("Напор (м)")
 
 		row.rpmEntry = widget.NewEntry()
-		row.rpmEntry.SetPlaceHolder("RPM (опц.)")
+		row.rpmEntry.SetPlaceHolder("Частота вращения (об/мин)")
 
 		row.specGravityEntry = widget.NewEntry()
-		row.specGravityEntry.SetPlaceHolder("Уд. вес (опц.)")
+		row.specGravityEntry.SetPlaceHolder("Удельный вес")
 
 		row.powerEntry = widget.NewEntry()
-		row.powerEntry.SetPlaceHolder("Мощность кВт (опц.)")
+		row.powerEntry.SetPlaceHolder("Мощность (кВт)")
 
 		return container.New(layout.NewFormLayout(),
-			widget.NewLabel("Расход:"), row.flowEntry,
-			widget.NewLabel("Напор:"), row.headEntry,
-			widget.NewLabel("RPM:"), row.rpmEntry,
-			widget.NewLabel("Уд. вес:"), row.specGravityEntry,
-			widget.NewLabel("Мощность:"), row.powerEntry,
+			widget.NewLabel("Расход (м³/ч):"), row.flowEntry,
+			widget.NewLabel("Напор (м):"), row.headEntry,
+			widget.NewLabel("Частота вращения (об/мин):"), row.rpmEntry,
+			widget.NewLabel("Удельный вес:"), row.specGravityEntry,
+			widget.NewLabel("Мощность (кВт):"), row.powerEntry,
 		)
 	}
 
 	buildConveyorFields := func(row *equipmentRow) *fyne.Container {
 		row.conveyorLengthEntry = widget.NewEntry()
-		row.conveyorLengthEntry.SetPlaceHolder("Длина конвейера")
+		row.conveyorLengthEntry.SetPlaceHolder("Длина конвейера (м)")
 
 		row.beltWidthEntry = widget.NewEntry()
-		row.beltWidthEntry.SetPlaceHolder("Ширина ленты")
+		row.beltWidthEntry.SetPlaceHolder("Ширина ленты (мм)")
 
 		return container.New(layout.NewFormLayout(),
-			widget.NewLabel("Conveyor Length:"), row.conveyorLengthEntry,
-			widget.NewLabel("Belt Width:"), row.beltWidthEntry,
+			widget.NewLabel("Длина конвейера (м):"), row.conveyorLengthEntry,
+			widget.NewLabel("Ширина ленты (мм):"), row.beltWidthEntry,
 		)
 	}
 
 	buildVesselFields := func(row *equipmentRow) *fyne.Container {
 		row.vesselDiameterEntry = widget.NewEntry()
-		row.vesselDiameterEntry.SetPlaceHolder("Диаметр аппарата")
+		row.vesselDiameterEntry.SetPlaceHolder("Диаметр аппарата (мм)")
 
 		row.vesselTangentToTangentHeightEntry = widget.NewEntry()
-		row.vesselTangentToTangentHeightEntry.SetPlaceHolder("Высота tangent-to-tangent")
+		row.vesselTangentToTangentHeightEntry.SetPlaceHolder("Высота (T/T, мм)")
 
 		return container.New(layout.NewFormLayout(),
-			widget.NewLabel("Vessel Diameter:"), row.vesselDiameterEntry,
-			widget.NewLabel("T/T Height:"), row.vesselTangentToTangentHeightEntry,
+			widget.NewLabel("Диаметр аппарата (мм):"), row.vesselDiameterEntry,
+			widget.NewLabel("Высота (T/T, мм):"), row.vesselTangentToTangentHeightEntry,
 		)
 	}
 
 	buildDrumFields := func(row *equipmentRow) *fyne.Container {
 		row.vesselDiameterEntry = widget.NewEntry()
-		row.vesselDiameterEntry.SetPlaceHolder("Диаметр аппарата")
+		row.vesselDiameterEntry.SetPlaceHolder("Диаметр аппарата (мм)")
 
 		row.designTangentToTangentLengthEntry = widget.NewEntry()
-		row.designTangentToTangentLengthEntry.SetPlaceHolder("Длина tangent-to-tangent")
+		row.designTangentToTangentLengthEntry.SetPlaceHolder("Длина (T/T, мм)")
 
 		return container.New(layout.NewFormLayout(),
-			widget.NewLabel("Vessel Diameter:"), row.vesselDiameterEntry,
-			widget.NewLabel("T/T Length:"), row.designTangentToTangentLengthEntry,
+			widget.NewLabel("Диаметр аппарата (мм):"), row.vesselDiameterEntry,
+			widget.NewLabel("Длина (T/T, мм):"), row.designTangentToTangentLengthEntry,
 		)
 	}
 
@@ -709,9 +711,9 @@ func showProject(w fyne.Window, projectName string) {
 			return buildPumpFields(row)
 		case "Конвейер":
 			return buildConveyorFields(row)
-		case "Vertical process vessel":
+		case "Вертикальный аппарат":
 			return buildVesselFields(row)
-		case "Horizontal drum":
+		case "Горизонтальная емкость":
 			return buildDrumFields(row)
 		default:
 			return container.NewVBox(widget.NewLabel("Неизвестный тип оборудования"))
@@ -761,10 +763,10 @@ func showProject(w fyne.Window, projectName string) {
 		case "Конвейер":
 			row.conveyorLengthEntry.SetText(floatPtrToStr(eq.ConveyorLength))
 			row.beltWidthEntry.SetText(floatPtrToStr(eq.BeltWidth))
-		case "Vertical process vessel":
+		case "Вертикальный аппарат":
 			row.vesselDiameterEntry.SetText(floatPtrToStr(eq.VesselDiameter))
 			row.vesselTangentToTangentHeightEntry.SetText(floatPtrToStr(eq.VesselTangentToTangentHeight))
-		case "Horizontal drum":
+		case "Горизонтальная емкость":
 			row.vesselDiameterEntry.SetText(floatPtrToStr(eq.VesselDiameter))
 			row.designTangentToTangentLengthEntry.SetText(floatPtrToStr(eq.DesignTangentToTangentLength))
 		}

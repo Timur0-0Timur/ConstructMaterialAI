@@ -9,7 +9,7 @@ sys.path.append(str(BASE_DIR))
 
 from utils.cleaners import vectorized_numeric_clean
 from domain.pump_features import PumpFeatureEngineer
-from features.enricher import PumpEnricher
+from utils.enricher import PumpEnricher
 
 logger = logging.getLogger(__name__)
 
