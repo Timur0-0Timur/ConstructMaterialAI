@@ -24,7 +24,7 @@ if exist "%PROJECT_ROOT%data-service\.venv\Scripts\activate.bat" (
 
 :: 3. Запуск Desktop App
 echo [3/3] Запуск Desktop приложения...
-start "Desktop App" cmd /k "cd /d %PROJECT_ROOT%desktop && go run main.go"
+start "Desktop App" cmd /k "cd /d %PROJECT_ROOT%desktop && go run ."
 
 echo.
 echo ====================================================

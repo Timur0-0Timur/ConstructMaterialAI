@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"image/color"
 	"io"
 	"net/http"
 	"os"
@@ -13,9 +14,11 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
+	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
@@ -349,19 +352,29 @@ type equipmentRow struct {
 	qtyEntry   *widget.Entry
 
 	// Насос
+	flowLabel        *canvas.Text
 	flowEntry        *widget.Entry
+	headLabel        *canvas.Text
 	headEntry        *widget.Entry
+	rpmLabel         *canvas.Text
 	rpmEntry         *widget.Entry
+	specGravityLabel *canvas.Text
 	specGravityEntry *widget.Entry
+	powerLabel       *canvas.Text
 	powerEntry       *widget.Entry
 
 	// Конвейер
+	conveyorLengthLabel *canvas.Text
 	conveyorLengthEntry *widget.Entry
+	beltWidthLabel      *canvas.Text
 	beltWidthEntry      *widget.Entry
 
 	// Vessel / Drum
+	vesselDiameterLabel               *canvas.Text
 	vesselDiameterEntry               *widget.Entry
+	designTangentToTangentLengthLabel *canvas.Text
 	designTangentToTangentLengthEntry *widget.Entry
+	vesselTangentToTangentHeightLabel *canvas.Text
 	vesselTangentToTangentHeightEntry *widget.Entry
 
 	// Контейнер с полями характеристик
@@ -369,23 +382,26 @@ type equipmentRow struct {
 
 	// Результат
 	resultLabel *widget.Label
+	expandBtn   *widget.Button
 	container   *fyne.Container
 }
 
 // collectEquipment собирает данные из виджетов строки
 func (r *equipmentRow) collectEquipment() (Equipment, error) {
+	r.clearValidation()
+
 	eq := Equipment{
 		Type: strings.TrimSpace(r.typeSelect.Selected),
 		Tag:  strings.TrimSpace(r.tagEntry.Text),
 	}
 
 	if eq.Tag == "" {
-		return eq, fmt.Errorf("тэг обязателен")
+		return eq, fmt.Errorf("Тэг обязателен")
 	}
 
 	q, err := strconv.Atoi(strings.TrimSpace(r.qtyEntry.Text))
 	if err != nil || q < 1 {
-		return eq, fmt.Errorf("кол-во должно быть >= 1")
+		return eq, fmt.Errorf("Кол-во должно быть >= 1")
 	}
 	eq.Quantity = q
 
@@ -393,13 +409,15 @@ func (r *equipmentRow) collectEquipment() (Equipment, error) {
 	case "Насосы":
 		flow, err := parseOptionalFloat(r.flowEntry.Text)
 		if err != nil || flow == nil {
-			return eq, fmt.Errorf("расход (Flow Rate) обязателен")
+			setLabelError(r.flowLabel, true)
+			return eq, fmt.Errorf("Расход (Flow Rate) обязателен")
 		}
 		eq.FlowRate = flow
 
 		head, err := parseOptionalFloat(r.headEntry.Text)
 		if err != nil || head == nil {
-			return eq, fmt.Errorf("напор (Fluid Head) обязателен")
+			setLabelError(r.headLabel, true)
+			return eq, fmt.Errorf("Напор (Fluid Head) обязателен")
 		}
 		eq.FluidHead = head
 
@@ -410,39 +428,45 @@ func (r *equipmentRow) collectEquipment() (Equipment, error) {
 	case "Конвейер":
 		conveyorLength, err := parseOptionalFloat(r.conveyorLengthEntry.Text)
 		if err != nil || conveyorLength == nil {
-			return eq, fmt.Errorf("длина конвейера (Conveyor Length) обязательна")
+			setLabelError(r.conveyorLengthLabel, true)
+			return eq, fmt.Errorf("Длина конвейера (Conveyor Length) обязательна")
 		}
 		eq.ConveyorLength = conveyorLength
 
 		beltWidth, err := parseOptionalFloat(r.beltWidthEntry.Text)
 		if err != nil || beltWidth == nil {
-			return eq, fmt.Errorf("ширина ленты (Belt Width) обязательна")
+			setLabelError(r.beltWidthLabel, true)
+			return eq, fmt.Errorf("Ширина ленты (Belt Width) обязательна")
 		}
 		eq.BeltWidth = beltWidth
 
 	case "Вертикальный аппарат":
 		vesselDiameter, err := parseOptionalFloat(r.vesselDiameterEntry.Text)
 		if err != nil || vesselDiameter == nil {
-			return eq, fmt.Errorf("диаметр аппарата (Vessel Diameter) обязателен")
+			setLabelError(r.vesselDiameterLabel, true)
+			return eq, fmt.Errorf("Диаметр аппарата (Vessel Diameter) обязателен")
 		}
 		eq.VesselDiameter = vesselDiameter
 
 		vesselHeight, err := parseOptionalFloat(r.vesselTangentToTangentHeightEntry.Text)
 		if err != nil || vesselHeight == nil {
-			return eq, fmt.Errorf("высота tangent-to-tangent обязательна")
+			setLabelError(r.vesselTangentToTangentHeightLabel, true)
+			return eq, fmt.Errorf("Высота tangent-to-tangent обязательна")
 		}
 		eq.VesselTangentToTangentHeight = vesselHeight
 
 	case "Горизонтальная емкость":
 		vesselDiameter, err := parseOptionalFloat(r.vesselDiameterEntry.Text)
 		if err != nil || vesselDiameter == nil {
-			return eq, fmt.Errorf("диаметр аппарата (Vessel Diameter) обязателен")
+			setLabelError(r.vesselDiameterLabel, true)
+			return eq, fmt.Errorf("Диаметр аппарата (Vessel Diameter) обязателен")
 		}
 		eq.VesselDiameter = vesselDiameter
 
 		designLength, err := parseOptionalFloat(r.designTangentToTangentLengthEntry.Text)
 		if err != nil || designLength == nil {
-			return eq, fmt.Errorf("длина tangent-to-tangent обязательна")
+			setLabelError(r.designTangentToTangentLengthLabel, true)
+			return eq, fmt.Errorf("Длина tangent-to-tangent обязательна")
 		}
 		eq.DesignTangentToTangentLength = designLength
 	}
@@ -561,6 +585,134 @@ func showProjectList(w fyne.Window) {
 	w.SetContent(container.NewPadded(content))
 }
 
+func createLabel(text string, required bool) (*canvas.Text, fyne.CanvasObject) {
+	t := canvas.NewText(text, theme.ForegroundColor())
+	t.TextSize = theme.TextSize()
+
+	if !required {
+		return t, t
+	}
+
+	ast := canvas.NewText(" *", color.NRGBA{R: 255, G: 0, B: 0, A: 255})
+	ast.TextSize = theme.TextSize()
+	ast.TextStyle.Bold = true
+
+	return t, container.NewHBox(t, ast)
+}
+
+func setLabelError(t *canvas.Text, hasError bool) {
+	if t == nil {
+		return
+	}
+	if hasError {
+		t.Color = color.NRGBA{R: 255, G: 0, B: 0, A: 255}
+		t.TextStyle.Bold = true
+	} else {
+		t.Color = theme.ForegroundColor()
+		t.TextStyle.Bold = false
+	}
+	t.Refresh()
+}
+
+func (r *equipmentRow) clearValidation() {
+	setLabelError(r.flowLabel, false)
+	setLabelError(r.headLabel, false)
+	setLabelError(r.rpmLabel, false)
+	setLabelError(r.specGravityLabel, false)
+	setLabelError(r.powerLabel, false)
+	setLabelError(r.conveyorLengthLabel, false)
+	setLabelError(r.beltWidthLabel, false)
+	setLabelError(r.vesselDiameterLabel, false)
+	setLabelError(r.designTangentToTangentLengthLabel, false)
+	setLabelError(r.vesselTangentToTangentHeightLabel, false)
+}
+
+func buildPumpFields(row *equipmentRow) *fyne.Container {
+	flowLabel, flowObj := createLabel("Расход (м³/ч):", true)
+	row.flowLabel = flowLabel
+	row.flowEntry = widget.NewEntry()
+	row.flowEntry.SetPlaceHolder("Введите расход (обязательно)")
+
+	headLabel, headObj := createLabel("Напор (м):", true)
+	row.headLabel = headLabel
+	row.headEntry = widget.NewEntry()
+	row.headEntry.SetPlaceHolder("Введите напор (обязательно)")
+
+	rpmLabel, rpmObj := createLabel("Частота вращения (об/мин):", false)
+	row.rpmLabel = rpmLabel
+	row.rpmEntry = widget.NewEntry()
+	row.rpmEntry.SetPlaceHolder("Частота вращения (об/мин)")
+
+	specGravityLabel, specGravityObj := createLabel("Удельный вес:", false)
+	row.specGravityLabel = specGravityLabel
+	row.specGravityEntry = widget.NewEntry()
+	row.specGravityEntry.SetPlaceHolder("Удельный вес")
+
+	powerLabel, powerObj := createLabel("Мощность (кВт):", false)
+	row.powerLabel = powerLabel
+	row.powerEntry = widget.NewEntry()
+	row.powerEntry.SetPlaceHolder("Мощность (кВт)")
+
+	return container.New(layout.NewFormLayout(),
+		flowObj, row.flowEntry,
+		headObj, row.headEntry,
+		rpmObj, row.rpmEntry,
+		specGravityObj, row.specGravityEntry,
+		powerObj, row.powerEntry,
+	)
+}
+
+func buildConveyorFields(row *equipmentRow) *fyne.Container {
+	conveyorLengthLabel, conveyorLengthObj := createLabel("Длина конвейера (м):", true)
+	row.conveyorLengthLabel = conveyorLengthLabel
+	row.conveyorLengthEntry = widget.NewEntry()
+	row.conveyorLengthEntry.SetPlaceHolder("Введите длину (обязательно)")
+
+	beltWidthLabel, beltWidthObj := createLabel("Ширина ленты (мм):", true)
+	row.beltWidthLabel = beltWidthLabel
+	row.beltWidthEntry = widget.NewEntry()
+	row.beltWidthEntry.SetPlaceHolder("Введите ширину (обязательно)")
+
+	return container.New(layout.NewFormLayout(),
+		conveyorLengthObj, row.conveyorLengthEntry,
+		beltWidthObj, row.beltWidthEntry,
+	)
+}
+
+func buildVesselFields(row *equipmentRow) *fyne.Container {
+	vesselDiameterLabel, vesselDiameterObj := createLabel("Диаметр аппарата (мм):", true)
+	row.vesselDiameterLabel = vesselDiameterLabel
+	row.vesselDiameterEntry = widget.NewEntry()
+	row.vesselDiameterEntry.SetPlaceHolder("Введите диаметр (обязательно)")
+
+	vesselTangentToTangentHeightLabel, vesselTangentToTangentHeightObj := createLabel("Высота (T/T, мм):", true)
+	row.vesselTangentToTangentHeightLabel = vesselTangentToTangentHeightLabel
+	row.vesselTangentToTangentHeightEntry = widget.NewEntry()
+	row.vesselTangentToTangentHeightEntry.SetPlaceHolder("Введите высоту (обязательно)")
+
+	return container.New(layout.NewFormLayout(),
+		vesselDiameterObj, row.vesselDiameterEntry,
+		vesselTangentToTangentHeightObj, row.vesselTangentToTangentHeightEntry,
+	)
+}
+
+func buildDrumFields(row *equipmentRow) *fyne.Container {
+	vesselDiameterLabel, vesselDiameterObj := createLabel("Диаметр аппарата (мм):", true)
+	row.vesselDiameterLabel = vesselDiameterLabel
+	row.vesselDiameterEntry = widget.NewEntry()
+	row.vesselDiameterEntry.SetPlaceHolder("Введите диаметр (обязательно)")
+
+	designTangentToTangentLengthLabel, designTangentToTangentLengthObj := createLabel("Длина (T/T, мм):", true)
+	row.designTangentToTangentLengthLabel = designTangentToTangentLengthLabel
+	row.designTangentToTangentLengthEntry = widget.NewEntry()
+	row.designTangentToTangentLengthEntry.SetPlaceHolder("Введите длину (обязательно)")
+
+	return container.New(layout.NewFormLayout(),
+		vesselDiameterObj, row.vesselDiameterEntry,
+		designTangentToTangentLengthObj, row.designTangentToTangentLengthEntry,
+	)
+}
+
 // showProject — главное окно проекта с динамическим списком оборудования
 func showProject(w fyne.Window, projectName string) {
 	appData := loadProjects()
@@ -639,70 +791,6 @@ func showProject(w fyne.Window, projectName string) {
 		rowsContainer.Remove(target.container)
 		rowsContainer.Refresh()
 		recalcAll()
-	}
-
-	buildPumpFields := func(row *equipmentRow) *fyne.Container {
-		row.flowEntry = widget.NewEntry()
-		row.flowEntry.SetPlaceHolder("Расход (м³/ч)")
-
-		row.headEntry = widget.NewEntry()
-		row.headEntry.SetPlaceHolder("Напор (м)")
-
-		row.rpmEntry = widget.NewEntry()
-		row.rpmEntry.SetPlaceHolder("Частота вращения (об/мин)")
-
-		row.specGravityEntry = widget.NewEntry()
-		row.specGravityEntry.SetPlaceHolder("Удельный вес")
-
-		row.powerEntry = widget.NewEntry()
-		row.powerEntry.SetPlaceHolder("Мощность (кВт)")
-
-		return container.New(layout.NewFormLayout(),
-			widget.NewLabel("Расход (м³/ч):"), row.flowEntry,
-			widget.NewLabel("Напор (м):"), row.headEntry,
-			widget.NewLabel("Частота вращения (об/мин):"), row.rpmEntry,
-			widget.NewLabel("Удельный вес:"), row.specGravityEntry,
-			widget.NewLabel("Мощность (кВт):"), row.powerEntry,
-		)
-	}
-
-	buildConveyorFields := func(row *equipmentRow) *fyne.Container {
-		row.conveyorLengthEntry = widget.NewEntry()
-		row.conveyorLengthEntry.SetPlaceHolder("Длина конвейера (м)")
-
-		row.beltWidthEntry = widget.NewEntry()
-		row.beltWidthEntry.SetPlaceHolder("Ширина ленты (мм)")
-
-		return container.New(layout.NewFormLayout(),
-			widget.NewLabel("Длина конвейера (м):"), row.conveyorLengthEntry,
-			widget.NewLabel("Ширина ленты (мм):"), row.beltWidthEntry,
-		)
-	}
-
-	buildVesselFields := func(row *equipmentRow) *fyne.Container {
-		row.vesselDiameterEntry = widget.NewEntry()
-		row.vesselDiameterEntry.SetPlaceHolder("Диаметр аппарата (мм)")
-
-		row.vesselTangentToTangentHeightEntry = widget.NewEntry()
-		row.vesselTangentToTangentHeightEntry.SetPlaceHolder("Высота (T/T, мм)")
-
-		return container.New(layout.NewFormLayout(),
-			widget.NewLabel("Диаметр аппарата (мм):"), row.vesselDiameterEntry,
-			widget.NewLabel("Высота (T/T, мм):"), row.vesselTangentToTangentHeightEntry,
-		)
-	}
-
-	buildDrumFields := func(row *equipmentRow) *fyne.Container {
-		row.vesselDiameterEntry = widget.NewEntry()
-		row.vesselDiameterEntry.SetPlaceHolder("Диаметр аппарата (мм)")
-
-		row.designTangentToTangentLengthEntry = widget.NewEntry()
-		row.designTangentToTangentLengthEntry.SetPlaceHolder("Длина (T/T, мм)")
-
-		return container.New(layout.NewFormLayout(),
-			widget.NewLabel("Диаметр аппарата (мм):"), row.vesselDiameterEntry,
-			widget.NewLabel("Длина (T/T, мм):"), row.designTangentToTangentLengthEntry,
-		)
 	}
 
 	buildFieldsByType := func(row *equipmentRow, eqType string) *fyne.Container {
@@ -805,12 +893,27 @@ func showProject(w fyne.Window, projectName string) {
 			for _, obj := range newFields.Objects {
 				row.fieldsContainer.Add(obj)
 			}
+			row.fieldsContainer.Show()
+			row.expandBtn.SetIcon(theme.MenuDropUpIcon())
 			row.fieldsContainer.Refresh()
 			row.resultLabel.SetText("—")
 			recalcAll()
 		}
 
+		row.expandBtn = widget.NewButtonWithIcon("", theme.MenuDropUpIcon(), func() {
+			if row.fieldsContainer.Visible() {
+				row.fieldsContainer.Hide()
+				row.expandBtn.SetIcon(theme.MenuDropDownIcon())
+			} else {
+				row.fieldsContainer.Show()
+				row.expandBtn.SetIcon(theme.MenuDropUpIcon())
+			}
+			row.container.Refresh()
+		})
+		row.expandBtn.Importance = widget.LowImportance
+
 		topRow := container.NewHBox(
+			row.expandBtn,
 			row.typeSelect,
 			tagContainer,
 			widget.NewLabel("Кол-во:"),
@@ -903,9 +1006,270 @@ func showProject(w fyne.Window, projectName string) {
 		byTypeLabel,
 	)
 
+	collapseAllBtn := widget.NewButtonWithIcon("Свернуть всё", theme.MenuDropDownIcon(), func() {
+		for _, r := range rows {
+			r.fieldsContainer.Hide()
+			r.expandBtn.SetIcon(theme.MenuDropDownIcon())
+			r.container.Refresh()
+		}
+	})
+
+	expandAllBtn := widget.NewButtonWithIcon("Развернуть всё", theme.MenuDropUpIcon(), func() {
+		for _, r := range rows {
+			r.fieldsContainer.Show()
+			r.expandBtn.SetIcon(theme.MenuDropUpIcon())
+			r.container.Refresh()
+		}
+	})
+
+	// Кнопка Help (инструкция)
+	helpBtn := widget.NewButtonWithIcon("", theme.QuestionIcon(), func() {
+		instructionText := `Инструкция по работе с шаблоном Excel:
+
+1. Нажмите «Шаблон» для скачивания пустого файла.
+2. Заполните соответствующие листы шаблона.
+3. Не меняйте порядок колонок.
+4. Обязательные поля отмечены в шаблоне красным цветом.
+5. Нажмите «Импорт» и выберите заполненный файл.
+
+Поддерживаемые типы оборудования:
+  • Насосы
+  • Конвейер
+  • Вертикальные аппараты
+  • Горизонтальные емкости
+
+При импорте данные добавляются к текущему проекту.`
+		dialog.ShowInformation("Справка: Импорт/Экспорт", instructionText, w)
+	})
+
+	// Кнопка «Шаблон»
+	templateBtn := widget.NewButtonWithIcon("Шаблон", theme.DownloadIcon(), func() {
+		saveDialog := dialog.NewFileSave(func(writer fyne.URIWriteCloser, err error) {
+			if err != nil {
+				dialog.ShowError(err, w)
+				return
+			}
+			if writer == nil {
+				return // пользователь отменил
+			}
+			filePath := writer.URI().Path()
+			writer.Close()
+			// Удаляем пустой файл, созданный Fyne, чтобы excelize мог записать свой
+			os.Remove(filePath)
+
+			if err := generateTemplate(filePath); err != nil {
+				dialog.ShowError(fmt.Errorf("Ошибка создания шаблона: %w", err), w)
+				return
+			}
+			dialog.ShowInformation("Готово", "Шаблон успешно сохранён.", w)
+		}, w)
+		saveDialog.SetFileName("шаблон_оборудования.xlsx")
+		saveDialog.SetFilter(storage.NewExtensionFileFilter([]string{".xlsx"}))
+		saveDialog.Show()
+	})
+
+	// Кнопка «Импорт»
+	importBtn := widget.NewButtonWithIcon("Импорт", theme.FolderOpenIcon(), func() {
+		openDialog := dialog.NewFileOpen(func(reader fyne.URIReadCloser, err error) {
+			if err != nil {
+				dialog.ShowError(err, w)
+				return
+			}
+			if reader == nil {
+				return // пользователь отменил
+			}
+			filePath := reader.URI().Path()
+			reader.Close()
+
+			imported, importErrors := importProject(filePath)
+
+			// Добавляем импортированное оборудование
+			for _, eq := range imported {
+				addEquipmentRow(eq)
+			}
+
+			// Показываем отчёт
+			if len(importErrors) > 0 {
+				var report strings.Builder
+				report.WriteString(fmt.Sprintf("Успешно импортировано: %d записей.\n\n", len(imported)))
+				report.WriteString("Ошибки при импорте:\n")
+				for _, ie := range importErrors {
+					report.WriteString("• " + ie.String() + "\n")
+				}
+				dialog.ShowInformation("Результат импорта", report.String(), w)
+			} else if len(imported) > 0 {
+				dialog.ShowInformation("Импорт завершён",
+					fmt.Sprintf("Успешно импортировано: %d записей.", len(imported)), w)
+			} else {
+				dialog.ShowInformation("Импорт", "Файл не содержит данных для импорта.", w)
+			}
+		}, w)
+		openDialog.SetFilter(storage.NewExtensionFileFilter([]string{".xlsx"}))
+		openDialog.Show()
+	})
+
+	// Кнопка «Экспорт»
+	exportBtn := widget.NewButtonWithIcon("Экспорт", theme.DocumentCreateIcon(), func() {
+		// Собираем оборудование из строк
+		var equipment []Equipment
+		hasUncalculated := false
+		for _, r := range rows {
+			eq, err := r.collectEquipment()
+			if err != nil {
+				continue
+			}
+			text := r.resultLabel.Text
+			if strings.HasSuffix(text, " кг/ед.") {
+				text = strings.TrimSuffix(text, " кг/ед.")
+				text = strings.TrimPrefix(text, "✓ ")
+				eq.CalculatedWeight, _ = strconv.ParseFloat(text, 64)
+			} else {
+				hasUncalculated = true
+			}
+			equipment = append(equipment, eq)
+		}
+
+		if len(equipment) == 0 {
+			dialog.ShowInformation("Экспорт", "Нет данных для экспорта.", w)
+			return
+		}
+
+		doExport := func(eqList []Equipment) {
+			saveDialog := dialog.NewFileSave(func(writer fyne.URIWriteCloser, err error) {
+				if err != nil {
+					dialog.ShowError(err, w)
+					return
+				}
+				if writer == nil {
+					return
+				}
+				filePath := writer.URI().Path()
+				writer.Close()
+				os.Remove(filePath)
+
+				if err := exportProject(filePath, eqList); err != nil {
+					dialog.ShowError(fmt.Errorf("Ошибка экспорта: %w", err), w)
+					return
+				}
+				dialog.ShowInformation("Готово", "Данные успешно экспортированы.", w)
+			}, w)
+			saveDialog.SetFileName(projectName + ".xlsx")
+			saveDialog.SetFilter(storage.NewExtensionFileFilter([]string{".xlsx"}))
+			saveDialog.Show()
+		}
+
+		if hasUncalculated {
+			// Диалог с двумя кнопками: продолжить или рассчитать
+			continueBtn := widget.NewButton("Всё равно продолжить", func() {
+				// Закрываем текущий диалог — просто вызываем экспорт
+				doExport(equipment)
+			})
+			calcBtn := widget.NewButton("Провести расчёт", func() {
+				// Запускаем расчёт всех строк
+				totalWeightLabel.SetText("⏳ Расчёт...")
+				go func() {
+					for _, r := range rows {
+						eq, err := r.collectEquipment()
+						if err != nil {
+							continue
+						}
+						r.resultLabel.SetText("⏳...")
+						r.resultLabel.Refresh()
+						weight, err := sendEquipmentToBackend(eq)
+						if err != nil {
+							r.resultLabel.SetText("✗ " + err.Error())
+						} else {
+							r.resultLabel.SetText(fmt.Sprintf("✓ %.2f кг/ед.", weight))
+						}
+						r.resultLabel.Refresh()
+					}
+					recalcAll()
+
+					// После расчёта — собираем заново и экспортируем
+					var updatedEquipment []Equipment
+					for _, r := range rows {
+						eq, err := r.collectEquipment()
+						if err != nil {
+							continue
+						}
+						text := r.resultLabel.Text
+						if strings.HasSuffix(text, " кг/ед.") {
+							text = strings.TrimSuffix(text, " кг/ед.")
+							text = strings.TrimPrefix(text, "✓ ")
+							eq.CalculatedWeight, _ = strconv.ParseFloat(text, 64)
+						}
+						updatedEquipment = append(updatedEquipment, eq)
+					}
+					doExport(updatedEquipment)
+				}()
+			})
+			calcBtn.Importance = widget.HighImportance
+
+			warningContent := container.NewVBox(
+				widget.NewLabel("Не у всех строк рассчитан вес.\nКолонка «Вес» будет пустой для нерассчитанных строк."),
+				container.NewHBox(continueBtn, calcBtn),
+			)
+
+			warningDialog := dialog.NewCustomWithoutButtons("Предупреждение", warningContent, w)
+			// Переопределяем кнопки для закрытия диалога
+			continueBtn.OnTapped = func() {
+				warningDialog.Hide()
+				doExport(equipment)
+			}
+			calcBtn.OnTapped = func() {
+				warningDialog.Hide()
+				totalWeightLabel.SetText("⏳ Расчёт...")
+				go func() {
+					for _, r := range rows {
+						eq, err := r.collectEquipment()
+						if err != nil {
+							continue
+						}
+						r.resultLabel.SetText("⏳...")
+						r.resultLabel.Refresh()
+						weight, err := sendEquipmentToBackend(eq)
+						if err != nil {
+							r.resultLabel.SetText("✗ " + err.Error())
+						} else {
+							r.resultLabel.SetText(fmt.Sprintf("✓ %.2f кг/ед.", weight))
+						}
+						r.resultLabel.Refresh()
+					}
+					recalcAll()
+
+					var updatedEquipment []Equipment
+					for _, r := range rows {
+						eq, err := r.collectEquipment()
+						if err != nil {
+							continue
+						}
+						text := r.resultLabel.Text
+						if strings.HasSuffix(text, " кг/ед.") {
+							text = strings.TrimSuffix(text, " кг/ед.")
+							text = strings.TrimPrefix(text, "✓ ")
+							eq.CalculatedWeight, _ = strconv.ParseFloat(text, 64)
+						}
+						updatedEquipment = append(updatedEquipment, eq)
+					}
+					doExport(updatedEquipment)
+				}()
+			}
+			warningDialog.Show()
+		} else {
+			doExport(equipment)
+		}
+	})
+
 	toolbar := container.NewHBox(
 		backBtn,
 		layout.NewSpacer(),
+		helpBtn,
+		templateBtn,
+		importBtn,
+		exportBtn,
+		widget.NewSeparator(),
+		collapseAllBtn,
+		expandAllBtn,
 		addBtn,
 	)
 
@@ -923,8 +1287,6 @@ func showProject(w fyne.Window, projectName string) {
 
 	w.SetContent(container.NewPadded(content))
 }
-
-// ─── Main ────────────────────────────────────────────────────
 
 func main() {
 	fmt.Println("Запуск десктопного приложения...")

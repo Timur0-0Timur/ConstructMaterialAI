@@ -39,7 +39,7 @@ def get_pump_estimation(input_data: dict) -> dict:
 
         return {
             "weight": round(float(predicted_weight), 2),
-            "features": processed_features  # возвращаем фичи для отладки
+            "features": processed_features  # возвращаем названия колонок для отладки
         }
     except Exception as e:
         logger.error(f"Ошибка в сервисе оценки насоса: {e}")
