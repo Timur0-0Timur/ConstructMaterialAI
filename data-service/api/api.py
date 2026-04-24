@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional, Any, Dict
 
-from .service import get_pump_estimation
+from .service import get_pump_estimation, get_vessel_estimation
 
 app = FastAPI(title="Pump Data/ML Service", version="1.0.0")
 
@@ -107,11 +107,12 @@ def drum_estimate(req: DrumRequest):
 def vessel_estimate(req: VesselRequest):
     try:
         input_data = req.model_dump()
-        # TODO: здесь позже будет вызов модели для vessel
+        result = get_vessel_estimation(input_data)
+        
         return Response(
             model_version=MODEL_VERSION,
-            weight=9009.0,               # заглушка
-            debug_features=input_data
+            weight=result["weight"],
+            debug_features=result["features"]
         )
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
