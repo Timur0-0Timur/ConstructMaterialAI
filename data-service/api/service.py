@@ -3,7 +3,7 @@ import logging
 import sys
 
 # импортируем наш новый легковесный сервис вместо тяжелого пайплайна
-from pipelines.api_pipeline import EquipmentAPIService, VesselAPIService
+from pipelines.api_pipeline import EquipmentAPIService, VesselAPIService, ConveyorAPIService
 from configs.config_loader import config
 
 # добавляем корень проекта в sys.path для импорта ml_service
@@ -11,7 +11,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from ml_service.predictor import PumpPredictor, VesselPredictor
+from ml_service.predictor import PumpPredictor, VesselPredictor, ConveyorPredictor
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,14 @@ vessel_service = VesselAPIService(
 )
 
 vessel_predictor = VesselPredictor()
+
+# инициализируем сервис для конвейеров
+conveyor_service = ConveyorAPIService(
+    output_folder_path=DATASETS_DIR,
+    config=config.get('equipment', {}).get('conveyor_inference', {})
+)
+
+conveyor_predictor = ConveyorPredictor()
 
 def get_pump_estimation(input_data: dict) -> dict:
     """Прослойка между API и расчетами для насосов"""
@@ -82,4 +90,29 @@ def get_vessel_estimation(input_data: dict) -> dict:
         }
     except Exception as e:
         logger.error(f"Ошибка в сервисе оценки сосуда: {e}")
+        raise ValueError(f"Ошибка обработки данных: {str(e)}")
+
+def get_conveyor_estimation(input_data: dict) -> dict:
+    """Прослойка между API и расчетами для конвейеров (Conveyor)"""
+    try:
+        # маппинг полей из API в формат сервиса
+        mapped_data = {
+            "tag": input_data.get("tag"),
+            "length_ft": input_data.get("conveyor_length"),
+            "width_in": input_data.get("belt_width"),
+            "flow_tph": input_data.get("conveyor_flow_rate", 0),
+        }
+
+        # 1. прогоняем через пайплайн (очистка + FE)
+        processed_features = conveyor_service.process_request(mapped_data)
+
+        # 2. вызов ML-модели
+        predicted_weight = conveyor_predictor.predict(processed_features)
+
+        return {
+            "weight": round(float(predicted_weight), 2),
+            "features": processed_features
+        }
+    except Exception as e:
+        logger.error(f"Ошибка в сервисе оценки конвейера: {e}")
         raise ValueError(f"Ошибка обработки данных: {str(e)}")

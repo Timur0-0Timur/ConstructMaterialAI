@@ -11,6 +11,7 @@ from utils.cleaners import vectorized_numeric_clean
 from domain.pump_features import PumpFeatureEngineer
 from utils.enricher import PumpEnricher
 from domain.vessel_features import VesselFeatureEngineer
+from domain.conveyor_features import ConveyorFeatureEngineer
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,50 @@ class EquipmentAPIService:
 
         # 6. возвращаем чистый словарь
         return df.to_dict(orient='records')[0]
+
+class ConveyorAPIService:
+    """Легковесный сервис для обработки одиночных запросов из API для конвейеров"""
+
+    def __init__(self, output_folder_path: Path, config: dict):
+        self.output_folder = output_folder_path
+        self.config = config
+
+    def process_request(self, input_dict: dict) -> dict:
+        logger.info('\n---ОБРАБОТКА ЗАПРОСА ИЗ API (CONVEYOR)---')
+
+        import numpy as np
+
+        # 1. из словаря в DataFrame
+        df = pd.DataFrame([input_dict])
+
+        # 2. валидация критических полей
+        critical_cols = ['length_ft', 'width_in']
+        for col in critical_cols:
+            if col not in df.columns or pd.isna(df[col].iloc[0]):
+                raise ValueError(f"Отсутствует обязательный параметр: {col}")
+
+        # 3. приведение типов
+        for col in ['length_ft', 'width_in', 'flow_tph']:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+
+        # 4. заполнение пропусков в flow_tph (как в ноутбуке)
+        if 'flow_tph' not in df.columns or pd.isna(df['flow_tph'].iloc[0]):
+            df['flow_tph'] = 0.0
+
+        # 5. feature engineering (повторяем логику из ноутбука)
+        df['belt_surface_area'] = df['length_ft'] * df['width_in']
+        df['load_proxy'] = df['flow_tph'] / (df['width_in'] + 1)
+
+        # 6. логарифмирование
+        cols_to_log = ['length_ft', 'width_in', 'flow_tph', 'belt_surface_area', 'load_proxy']
+        for col in cols_to_log:
+            df[f'log_{col}'] = np.log1p(df[col])
+
+        # 7. возвращаем чистый словарь
+        result = df.to_dict(orient='records')[0]
+        logger.info(f"Обработанные признаки конвейера: {result}")
+        return result
 
 class VesselAPIService:
     """Легковесный сервис для обработки одиночных запросов из API для сосудов"""
