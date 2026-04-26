@@ -31,6 +31,8 @@ const (
 	conveyorBackendURL = "http://localhost:8080/conveyor/estimate"
 	vesselBackendURL   = "http://localhost:8080/vessel/estimate"
 	drumBackendURL     = "http://localhost:8080/drum/estimate"
+	windowWidth        = 1100
+	windowHeight       = 750
 )
 
 var equipmentTypes = []string{
@@ -77,6 +79,22 @@ type Equipment struct {
 type Project struct {
 	Name      string      `json:"name"`
 	Equipment []Equipment `json:"equipment"`
+}
+
+func (p Project) TotalWeight() float64 {
+	var total float64
+	for _, eq := range p.Equipment {
+		total += eq.CalculatedWeight * float64(eq.Quantity)
+	}
+	return total
+}
+
+func (p Project) EquipmentCount() int {
+	var count int
+	for _, eq := range p.Equipment {
+		count += eq.Quantity
+	}
+	return count
 }
 
 // AppData — корневая структура для JSON-файла
@@ -354,6 +372,27 @@ func floatPtrToStr(p *float64) string {
 	return fmt.Sprintf("%.2f", *p)
 }
 
+// ─── UI: Карточка проекта ───────────────────────────────────
+
+type projectCard struct {
+	project   Project
+	container *fyne.Container
+	bg        *canvas.Rectangle
+	accent    *canvas.Rectangle
+}
+
+func (c *projectCard) refreshTheme() {
+	v := fyne.CurrentApp().Settings().ThemeVariant()
+	if c.bg != nil {
+		c.bg.FillColor = theme.Current().Color(ColorNameCardBackground, v)
+		c.bg.Refresh()
+	}
+	if c.accent != nil {
+		c.accent.FillColor = theme.PrimaryColor()
+		c.accent.Refresh()
+	}
+}
+
 // ─── UI: строка оборудования ─────────────────────────────────
 
 // equipmentRow хранит ссылки на виджеты одной строки
@@ -619,45 +658,126 @@ func showStartScreen(w fyne.Window) {
 	)
 
 	w.SetContent(container.NewPadded(content))
+	w.Resize(fyne.NewSize(windowWidth, windowHeight))
+}
+
+// createProjectCard — создает визуальный блок проекта
+func createProjectCard(w fyne.Window, proj Project, onOpen func(), onDelete func()) *projectCard {
+	card := &projectCard{project: proj}
+
+	title := widget.NewLabelWithStyle(proj.Name, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	title.Truncation = fyne.TextTruncateEllipsis
+
+	eqCount := proj.EquipmentCount()
+	weight := proj.TotalWeight()
+
+	info := widget.NewLabel(fmt.Sprintf("Оборудование: %d | Вес: %.2f кг", eqCount, weight))
+	info.TextStyle = fyne.TextStyle{Italic: true}
+
+	openBtn := widget.NewButtonWithIcon("Открыть", theme.FolderOpenIcon(), onOpen)
+	openBtn.Importance = widget.HighImportance
+
+	deleteBtn := widget.NewButtonWithIcon("", theme.DeleteIcon(), onDelete)
+	deleteBtn.Importance = widget.LowImportance
+
+	v := fyne.CurrentApp().Settings().ThemeVariant()
+	card.bg = canvas.NewRectangle(theme.Current().Color(ColorNameCardBackground, v))
+	card.bg.CornerRadius = 12
+
+	card.accent = canvas.NewRectangle(theme.PrimaryColor())
+	card.accent.SetMinSize(fyne.NewSize(4, 0))
+
+	content := container.NewPadded(container.NewHBox(
+		card.accent,
+		container.NewVBox(
+			title,
+			info,
+		),
+		layout.NewSpacer(),
+		container.NewHBox(openBtn, deleteBtn),
+	))
+
+	card.container = container.NewStack(card.bg, content)
+	return card
 }
 
 // showProjectList — экран выбора / создания проекта
 func showProjectList(w fyne.Window) {
 	appData := loadProjects()
 
-	title := widget.NewLabel("Проекты")
+	title := widget.NewLabel("Менеджер проектов")
 	title.Alignment = fyne.TextAlignCenter
 	title.TextStyle = fyne.TextStyle{Bold: true}
 
+	// Панель статистики
+	totalProjectsLabel := widget.NewLabel("")
+
+	updateStats := func() {
+		totalProjectsLabel.SetText(fmt.Sprintf("Всего проектов: %d", len(appData.Projects)))
+	}
+	updateStats()
+
+	statsBar := container.NewHBox(
+		container.NewPadded(totalProjectsLabel),
+		layout.NewSpacer(),
+	)
+
 	projectList := container.NewVBox()
-	for i := range appData.Projects {
-		idx := i
-		proj := appData.Projects[idx]
+	cards := []*projectCard{}
 
-		openBtn := widget.NewButtonWithIcon(proj.Name, theme.FolderOpenIcon(), func() {
-			showProject(w, proj.Name)
-		})
+	renderProjects := func(filter string) {
+		projectList.RemoveAll()
+		cards = []*projectCard{}
+		filter = strings.ToLower(filter)
 
-		deleteBtn := widget.NewButtonWithIcon("", theme.DeleteIcon(), func() {
-			dialog.ShowConfirm("Удалить проект",
-				fmt.Sprintf("Удалить проект «%s»?", proj.Name),
-				func(ok bool) {
-					if !ok {
-						return
-					}
-					appData.Projects = append(appData.Projects[:idx], appData.Projects[idx+1:]...)
-					_ = saveProjects(appData)
-					showProjectList(w)
-				}, w)
-		})
+		found := false
+		for i := range appData.Projects {
+			idx := i
+			proj := appData.Projects[idx]
 
-		row := container.NewHBox(openBtn, layout.NewSpacer(), deleteBtn)
-		projectList.Add(row)
+			if filter != "" && !strings.Contains(strings.ToLower(proj.Name), filter) {
+				continue
+			}
+			found = true
+
+			card := createProjectCard(w, proj,
+				func() {
+					showProject(w, proj.Name)
+				},
+				func() {
+					dialog.ShowConfirm("Удалить проект",
+						fmt.Sprintf("Удалить проект «%s»?", proj.Name),
+						func(ok bool) {
+							if !ok {
+								return
+							}
+							appData.Projects = append(appData.Projects[:idx], appData.Projects[idx+1:]...)
+							_ = saveProjects(appData)
+							showProjectList(w)
+						}, w)
+				})
+			cards = append(cards, card)
+			projectList.Add(container.NewPadded(card.container))
+		}
+
+		if !found {
+			msg := "Нет проектов"
+			if filter != "" {
+				msg = "Ничего не найдено"
+			}
+			projectList.Add(container.NewCenter(container.NewVBox(
+				widget.NewLabel(""),
+				widget.NewLabel(msg),
+			)))
+		}
+		projectList.Refresh()
 	}
 
-	if len(appData.Projects) == 0 {
-		projectList.Add(widget.NewLabel("Нет проектов. Создайте новый."))
-	}
+	searchEntry := widget.NewEntry()
+	searchEntry.SetPlaceHolder("Поиск проекта...")
+	searchEntry.OnChanged = renderProjects
+
+	renderProjects("")
 
 	createBtn := widget.NewButtonWithIcon("Создать проект", theme.ContentAddIcon(), func() {
 		nameEntry := widget.NewEntry()
@@ -689,9 +809,6 @@ func showProjectList(w fyne.Window) {
 		showStartScreen(w)
 	})
 
-	scrollable := container.NewVScroll(projectList)
-	scrollable.SetMinSize(fyne.NewSize(400, 300))
-
 	themeBtn := widget.NewButtonWithIcon("", theme.ColorPaletteIcon(), func() {
 		current := fyne.CurrentApp().Settings().Theme()
 		if m, ok := current.(*modernTheme); ok && m.variant == theme.VariantDark {
@@ -699,19 +816,33 @@ func showProjectList(w fyne.Window) {
 		} else {
 			fyne.CurrentApp().Settings().SetTheme(newModernDarkTheme())
 		}
+		// Обновляем карточки
+		for _, c := range cards {
+			c.refreshTheme()
+		}
 		w.Content().Refresh()
 	})
 
-	content := container.NewVBox(
+	scrollable := container.NewVScroll(projectList)
+	scrollable.SetMinSize(fyne.NewSize(600, 400))
+
+	header := container.NewVBox(
 		container.NewHBox(backBtn, layout.NewSpacer(), themeBtn),
 		title,
+		statsBar,
+		container.NewPadded(searchEntry),
 		widget.NewSeparator(),
+	)
+
+	content := container.NewBorder(
+		header,
+		container.NewPadded(createBtn),
+		nil, nil,
 		scrollable,
-		layout.NewSpacer(),
-		createBtn,
 	)
 
 	w.SetContent(container.NewPadded(content))
+	w.Resize(fyne.NewSize(windowWidth, windowHeight))
 }
 
 func createLabel(text string, required bool) (*canvas.Text, fyne.CanvasObject) {
@@ -737,15 +868,17 @@ func setLabelError(t *canvas.Text, hasError bool) {
 	if t == nil {
 		return
 	}
-	t.Color = theme.ForegroundColor()
-	if hasError {
-		t.TextStyle.Bold = true
-	} else {
-		// Для обычных полей оставляем Bold=true, как в createLabel, 
-		// чтобы не "прыгал" текст при валидации.
-		t.TextStyle.Bold = true 
-	}
-	t.Refresh()
+	fyne.Do(func() {
+		t.Color = theme.ForegroundColor()
+		if hasError {
+			t.TextStyle.Bold = true
+		} else {
+			// Для обычных полей оставляем Bold=true, как в createLabel,
+			// чтобы не "прыгал" текст при валидации.
+			t.TextStyle.Bold = true
+		}
+		t.Refresh()
+	})
 }
 
 func (r *equipmentRow) clearValidation() {
@@ -974,46 +1107,52 @@ func showProject(w fyne.Window, projectName string) {
 
 	totalWeightLabel := widget.NewLabel("—")
 	totalWeightLabel.TextStyle = fyne.TextStyle{Bold: true}
-	totalWeightLabel.Alignment = fyne.TextAlignTrailing
+	totalWeightLabel.Alignment = fyne.TextAlignLeading
 	byTypeLabel := widget.NewLabel("По типам: —")
 
 	recalcAll := func() {
 		var grandTotal float64
 		typeWeights := make(map[string]float64)
 
-		for _, r := range rows {
-			eq, err := r.collectEquipment()
-			if err != nil {
-				continue
-			}
+		// Чтение данных из виджетов должно происходить в основном потоке
+		fyne.DoAndWait(func() {
+			for _, r := range rows {
+				eq, err := r.collectEquipment()
+				if err != nil {
+					continue
+				}
 
-			var unitWeight float64
-			text := r.resultLabel.Text
-			if strings.HasSuffix(text, " кг/ед.") {
-				text = strings.TrimSuffix(text, " кг/ед.")
-				unitWeight, _ = strconv.ParseFloat(text, 64)
-			}
+				var unitWeight float64
+				text := r.resultLabel.Text
+				if strings.HasSuffix(text, " кг/ед.") {
+					text = strings.TrimSuffix(text, " кг/ед.")
+					text = strings.TrimPrefix(text, "✓ ")
+					unitWeight, _ = strconv.ParseFloat(text, 64)
+				}
 
-			lineTotal := unitWeight * float64(eq.Quantity)
-			grandTotal += lineTotal
-			if unitWeight > 0 {
-				typeWeights[eq.Type] += lineTotal
+				lineTotal := unitWeight * float64(eq.Quantity)
+				grandTotal += lineTotal
+				if unitWeight > 0 {
+					typeWeights[eq.Type] += lineTotal
+				}
 			}
-		}
+		})
 
-		totalWeightLabel.SetText(fmt.Sprintf("%.2f кг", grandTotal))
+		fyne.Do(func() {
+			totalWeightLabel.SetText(fmt.Sprintf("%.2f кг", grandTotal))
 
-		var parts []string
-		for _, t := range equipmentTypes {
-			if ww, ok := typeWeights[t]; ok && ww > 0 {
-				parts = append(parts, fmt.Sprintf("%s: %.2f кг", t, ww))
+			var parts []string
+			for _, t := range equipmentTypes {
+				if ww, ok := typeWeights[t]; ok && ww > 0 {
+					parts = append(parts, fmt.Sprintf("%s: %.2f кг", t, ww))
+				}
 			}
-		}
-		if len(parts) > 0 {
-			byTypeLabel.SetText("По типам: " + strings.Join(parts, " | "))
-		} else {
-			byTypeLabel.SetText("По типам: —")
-		}
+			if len(parts) > 0 {
+				byTypeLabel.SetText("По типам: " + strings.Join(parts, " | "))
+			} else {
+				byTypeLabel.SetText("По типам: —")
+			}
+		})
 	}
 
 	removeRow := func(target *equipmentRow) {
@@ -1114,18 +1253,22 @@ func showProject(w fyne.Window, projectName string) {
 				return
 			}
 
-			row.resultLabel.SetText("⏳ Расчёт...")
-			row.resultLabel.Refresh()
+			fyne.Do(func() {
+				row.resultLabel.SetText("⏳ Расчёт...")
+				row.resultLabel.Refresh()
+			})
 
 			go func() {
 				weight, err := sendEquipmentToBackend(eqData)
-				if err != nil {
-					row.resultLabel.SetText("✗ " + err.Error())
-				} else {
-					row.resultLabel.SetText(fmt.Sprintf("%.2f кг/ед.", weight))
-				}
-				row.resultLabel.Refresh()
-				recalcAll()
+				fyne.Do(func() {
+					if err != nil {
+						row.resultLabel.SetText("✗ " + err.Error())
+					} else {
+						row.resultLabel.SetText(fmt.Sprintf("%.2f кг/ед.", weight))
+					}
+					row.resultLabel.Refresh()
+					recalcAll()
+				})
 			}()
 		})
 		calcBtn.Importance = widget.HighImportance
@@ -1229,25 +1372,34 @@ func showProject(w fyne.Window, projectName string) {
 	addBtn.Importance = widget.HighImportance
 
 	calcAllBtn := widget.NewButtonWithIcon("Рассчитать всё", theme.ComputerIcon(), func() {
-		totalWeightLabel.SetText("⏳ Расчёт...")
+		fyne.Do(func() {
+			totalWeightLabel.SetText("⏳ Расчёт...")
+		})
 
 		go func() {
 			for _, r := range rows {
-				eq, err := r.collectEquipment()
+				var eq Equipment
+				var err error
+				fyne.DoAndWait(func() {
+					eq, err = r.collectEquipment()
+					if err == nil {
+						r.resultLabel.SetText("⏳...")
+						r.resultLabel.Refresh()
+					}
+				})
 				if err != nil {
 					continue
 				}
 
-				r.resultLabel.SetText("⏳...")
-				r.resultLabel.Refresh()
-
 				weight, err := sendEquipmentToBackend(eq)
-				if err != nil {
-					r.resultLabel.SetText("✗ " + err.Error())
-				} else {
-					r.resultLabel.SetText(fmt.Sprintf("%.2f кг/ед.", weight))
-				}
-				r.resultLabel.Refresh()
+				fyne.Do(func() {
+					if err != nil {
+						r.resultLabel.SetText("✗ " + err.Error())
+					} else {
+						r.resultLabel.SetText(fmt.Sprintf("%.2f кг/ед.", weight))
+					}
+					r.resultLabel.Refresh()
+				})
 			}
 			recalcAll()
 		}()
@@ -1287,7 +1439,6 @@ func showProject(w fyne.Window, projectName string) {
 		widget.NewSeparator(),
 		container.NewHBox(
 			widget.NewLabelWithStyle("Итоговый вес проекта:", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-			layout.NewSpacer(),
 			totalWeightLabel,
 		),
 		byTypeLabel,
@@ -1453,22 +1604,33 @@ func showProject(w fyne.Window, projectName string) {
 			})
 			calcBtn := widget.NewButton("Провести расчёт", func() {
 				// Запускаем расчёт всех строк
-				totalWeightLabel.SetText("⏳ Расчёт...")
+				fyne.Do(func() {
+					totalWeightLabel.SetText("⏳ Расчёт...")
+				})
 				go func() {
 					for _, r := range rows {
-						eq, err := r.collectEquipment()
+						var eq Equipment
+						var err error
+						fyne.DoAndWait(func() {
+							eq, err = r.collectEquipment()
+							if err == nil {
+								r.resultLabel.SetText("⏳...")
+								r.resultLabel.Refresh()
+							}
+						})
 						if err != nil {
 							continue
 						}
-						r.resultLabel.SetText("⏳...")
-						r.resultLabel.Refresh()
+
 						weight, err := sendEquipmentToBackend(eq)
-						if err != nil {
-							r.resultLabel.SetText("✗ " + err.Error())
-						} else {
-							r.resultLabel.SetText(fmt.Sprintf("✓ %.2f кг/ед.", weight))
-						}
-						r.resultLabel.Refresh()
+						fyne.Do(func() {
+							if err != nil {
+								r.resultLabel.SetText("✗ " + err.Error())
+							} else {
+								r.resultLabel.SetText(fmt.Sprintf("✓ %.2f кг/ед.", weight))
+							}
+							r.resultLabel.Refresh()
+						})
 					}
 					recalcAll()
 
@@ -1505,22 +1667,33 @@ func showProject(w fyne.Window, projectName string) {
 			}
 			calcBtn.OnTapped = func() {
 				warningDialog.Hide()
-				totalWeightLabel.SetText("⏳ Расчёт...")
+				fyne.Do(func() {
+					totalWeightLabel.SetText("⏳ Расчёт...")
+				})
 				go func() {
 					for _, r := range rows {
-						eq, err := r.collectEquipment()
+						var eq Equipment
+						var err error
+						fyne.DoAndWait(func() {
+							eq, err = r.collectEquipment()
+							if err == nil {
+								r.resultLabel.SetText("⏳...")
+								r.resultLabel.Refresh()
+							}
+						})
 						if err != nil {
 							continue
 						}
-						r.resultLabel.SetText("⏳...")
-						r.resultLabel.Refresh()
+
 						weight, err := sendEquipmentToBackend(eq)
-						if err != nil {
-							r.resultLabel.SetText("✗ " + err.Error())
-						} else {
-							r.resultLabel.SetText(fmt.Sprintf("%.2f кг/ед.", weight))
-						}
-						r.resultLabel.Refresh()
+						fyne.Do(func() {
+							if err != nil {
+								r.resultLabel.SetText("✗ " + err.Error())
+							} else {
+								r.resultLabel.SetText(fmt.Sprintf("%.2f кг/ед.", weight))
+							}
+							r.resultLabel.Refresh()
+						})
 					}
 					recalcAll()
 
@@ -1562,17 +1735,21 @@ func showProject(w fyne.Window, projectName string) {
 		w.Content().Refresh()
 	})
 
-	toolbar := container.NewHBox(
+	toolbarTop := container.NewHBox(
 		backBtn,
 		layout.NewSpacer(),
 		themeBtn,
 		helpBtn,
+	)
+
+	toolbarActions := container.NewHBox(
 		templateBtn,
 		importBtn,
 		exportBtn,
 		widget.NewSeparator(),
 		collapseAllBtn,
 		expandAllBtn,
+		layout.NewSpacer(),
 		addBtn,
 	)
 
@@ -1582,13 +1759,14 @@ func showProject(w fyne.Window, projectName string) {
 	)
 
 	content := container.NewBorder(
-		container.NewVBox(toolbar, title, widget.NewSeparator()),
+		container.NewVBox(toolbarTop, toolbarActions, title, widget.NewSeparator()),
 		container.NewVBox(footer, bottomButtons),
 		nil, nil,
 		scrollable,
 	)
 
 	w.SetContent(container.NewPadded(content))
+	w.Resize(fyne.NewSize(windowWidth, windowHeight))
 }
 
 func main() {
@@ -1597,7 +1775,7 @@ func main() {
 	myApp := app.New()
 	myApp.Settings().SetTheme(newModernDarkTheme())
 	myWindow := myApp.NewWindow("ConstructMaterialAI: Учёт оборудования")
-	myWindow.Resize(fyne.NewSize(1000, 750))
+	myWindow.Resize(fyne.NewSize(windowWidth, windowHeight))
 
 	showStartScreen(myWindow)
 
