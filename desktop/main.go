@@ -64,6 +64,10 @@ type Equipment struct {
 	VesselDiameter               *float64 `json:"vessel_diameter,omitempty"`
 	DesignTangentToTangentLength *float64 `json:"design_tangent_to_tangent_length,omitempty"`
 	VesselTangentToTangentHeight *float64 `json:"vessel_tangent_to_tangent_height,omitempty"`
+	DesignGaugePressure          *float64 `json:"design_gauge_pressure,omitempty"`
+	DesignTemperature            *float64 `json:"design_temperature,omitempty"`
+	SkirtHeight                  *float64 `json:"skirt_height,omitempty"`
+	VesselLegHeight              *float64 `json:"vessel_leg_height,omitempty"`
 
 	// Рассчитанный вес за единицу
 	CalculatedWeight float64 `json:"calculated_weight"`
@@ -102,6 +106,10 @@ type VesselRequest struct {
 	Tag                          string   `json:"tag"`
 	VesselDiameter               *float64 `json:"vessel_diameter"`
 	VesselTangentToTangentHeight *float64 `json:"vessel_tangent_to_tangent_height"`
+	DesignGaugePressure          *float64 `json:"design_gauge_pressure,omitempty"`
+	DesignTemperature            *float64 `json:"design_temperature,omitempty"`
+	SkirtHeight                  *float64 `json:"skirt_height,omitempty"`
+	VesselLegHeight              *float64 `json:"vessel_leg_height,omitempty"`
 }
 
 type DrumRequest struct {
@@ -277,6 +285,10 @@ func sendEquipmentToBackend(eq Equipment) (float64, error) {
 			Tag:                          eq.Tag,
 			VesselDiameter:               eq.VesselDiameter,
 			VesselTangentToTangentHeight: eq.VesselTangentToTangentHeight,
+			DesignGaugePressure:          eq.DesignGaugePressure,
+			DesignTemperature:            eq.DesignTemperature,
+			SkirtHeight:                  eq.SkirtHeight,
+			VesselLegHeight:              eq.VesselLegHeight,
 		}
 		return sendVesselToBackend(req)
 
@@ -376,6 +388,14 @@ type equipmentRow struct {
 	designTangentToTangentLengthEntry *widget.Entry
 	vesselTangentToTangentHeightLabel *canvas.Text
 	vesselTangentToTangentHeightEntry *widget.Entry
+	designGaugePressureLabel          *canvas.Text
+	designGaugePressureEntry          *widget.Entry
+	designTemperatureLabel            *canvas.Text
+	designTemperatureEntry            *widget.Entry
+	skirtHeightLabel                  *canvas.Text
+	skirtHeightEntry                  *widget.Entry
+	vesselLegHeightLabel              *canvas.Text
+	vesselLegHeightEntry              *widget.Entry
 
 	// Контейнер с полями характеристик
 	fieldsContainer *fyne.Container
@@ -454,6 +474,17 @@ func (r *equipmentRow) collectEquipment() (Equipment, error) {
 			return eq, fmt.Errorf("Высота tangent-to-tangent обязательна")
 		}
 		eq.VesselTangentToTangentHeight = vesselHeight
+
+		eq.DesignGaugePressure, _ = parseOptionalFloat(r.designGaugePressureEntry.Text)
+		eq.DesignTemperature, _ = parseOptionalFloat(r.designTemperatureEntry.Text)
+		eq.SkirtHeight, _ = parseOptionalFloat(r.skirtHeightEntry.Text)
+		eq.VesselLegHeight, _ = parseOptionalFloat(r.vesselLegHeightEntry.Text)
+
+		if eq.SkirtHeight != nil && eq.VesselLegHeight != nil {
+			setLabelError(r.skirtHeightLabel, true)
+			setLabelError(r.vesselLegHeightLabel, true)
+			return eq, fmt.Errorf("Нельзя указывать одновременно высоту юбки и высоту опор")
+		}
 
 	case "Горизонтальная емкость":
 		vesselDiameter, err := parseOptionalFloat(r.vesselDiameterEntry.Text)
@@ -625,6 +656,10 @@ func (r *equipmentRow) clearValidation() {
 	setLabelError(r.vesselDiameterLabel, false)
 	setLabelError(r.designTangentToTangentLengthLabel, false)
 	setLabelError(r.vesselTangentToTangentHeightLabel, false)
+	setLabelError(r.designGaugePressureLabel, false)
+	setLabelError(r.designTemperatureLabel, false)
+	setLabelError(r.skirtHeightLabel, false)
+	setLabelError(r.vesselLegHeightLabel, false)
 }
 
 func buildPumpFields(row *equipmentRow) *fyne.Container {
@@ -690,9 +725,33 @@ func buildVesselFields(row *equipmentRow) *fyne.Container {
 	row.vesselTangentToTangentHeightEntry = widget.NewEntry()
 	row.vesselTangentToTangentHeightEntry.SetPlaceHolder("Введите высоту (обязательно)")
 
+	designGaugePressureLabel, designGaugePressureObj := createLabel("Давление (МПа):", false)
+	row.designGaugePressureLabel = designGaugePressureLabel
+	row.designGaugePressureEntry = widget.NewEntry()
+	row.designGaugePressureEntry.SetPlaceHolder("Давление")
+
+	designTemperatureLabel, designTemperatureObj := createLabel("Температура (°C):", false)
+	row.designTemperatureLabel = designTemperatureLabel
+	row.designTemperatureEntry = widget.NewEntry()
+	row.designTemperatureEntry.SetPlaceHolder("Температура")
+
+	skirtHeightLabel, skirtHeightObj := createLabel("Высота юбки (мм):", false)
+	row.skirtHeightLabel = skirtHeightLabel
+	row.skirtHeightEntry = widget.NewEntry()
+	row.skirtHeightEntry.SetPlaceHolder("Высота юбки")
+
+	vesselLegHeightLabel, vesselLegHeightObj := createLabel("Высота опор (мм):", false)
+	row.vesselLegHeightLabel = vesselLegHeightLabel
+	row.vesselLegHeightEntry = widget.NewEntry()
+	row.vesselLegHeightEntry.SetPlaceHolder("Высота опор")
+
 	return container.New(layout.NewFormLayout(),
 		vesselDiameterObj, row.vesselDiameterEntry,
 		vesselTangentToTangentHeightObj, row.vesselTangentToTangentHeightEntry,
+		designGaugePressureObj, row.designGaugePressureEntry,
+		designTemperatureObj, row.designTemperatureEntry,
+		skirtHeightObj, row.skirtHeightEntry,
+		vesselLegHeightObj, row.vesselLegHeightEntry,
 	)
 }
 
@@ -854,6 +913,10 @@ func showProject(w fyne.Window, projectName string) {
 		case "Вертикальный аппарат":
 			row.vesselDiameterEntry.SetText(floatPtrToStr(eq.VesselDiameter))
 			row.vesselTangentToTangentHeightEntry.SetText(floatPtrToStr(eq.VesselTangentToTangentHeight))
+			row.designGaugePressureEntry.SetText(floatPtrToStr(eq.DesignGaugePressure))
+			row.designTemperatureEntry.SetText(floatPtrToStr(eq.DesignTemperature))
+			row.skirtHeightEntry.SetText(floatPtrToStr(eq.SkirtHeight))
+			row.vesselLegHeightEntry.SetText(floatPtrToStr(eq.VesselLegHeight))
 		case "Горизонтальная емкость":
 			row.vesselDiameterEntry.SetText(floatPtrToStr(eq.VesselDiameter))
 			row.designTangentToTangentLengthEntry.SetText(floatPtrToStr(eq.DesignTangentToTangentLength))

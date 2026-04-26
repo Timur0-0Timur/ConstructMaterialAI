@@ -52,6 +52,10 @@ var vesselColumns = []colDef{
 	{"Кол-во", true},
 	{"Диаметр (мм)", true},
 	{"Высота T/T (мм)", true},
+	{"Давление (МПа)", false},
+	{"Темп. (°C)", false},
+	{"Высота юбки (мм)", false},
+	{"Высота опор (мм)", false},
 	{"Вес (кг)", false},
 }
 
@@ -77,8 +81,6 @@ func columnsForSheet(sheet string) []colDef {
 	return nil
 }
 
-// ─── ImportError ─────────────────────────────────────────────
-
 // ImportError описывает одну ошибку валидации при импорте.
 type ImportError struct {
 	Sheet  string
@@ -90,8 +92,6 @@ type ImportError struct {
 func (e ImportError) String() string {
 	return fmt.Sprintf("Лист «%s», строка %d: в колонке «%s» %s", e.Sheet, e.Row, e.Column, e.Msg)
 }
-
-// ─── Генерация шаблона ──────────────────────────────────────
 
 // generateTemplate создаёт пустой XLSX-файл с заголовками.
 func generateTemplate(filePath string) error {
@@ -123,7 +123,7 @@ func generateTemplate(filePath string) error {
 
 	for i, sheet := range sheetOrder {
 		if i == 0 {
-			// Переименовываем первый лист (Sheet1) вместо создания нового
+			// Переименовываем первый лист (Sheet1)
 			if err := f.SetSheetName(defaultSheetFix, sheet); err != nil {
 				return fmt.Errorf("ошибка переименования листа: %w", err)
 			}
@@ -155,8 +155,6 @@ func generateTemplate(filePath string) error {
 
 	return f.SaveAs(filePath)
 }
-
-// ─── Экспорт ────────────────────────────────────────────────
 
 // exportProject экспортирует оборудование проекта в XLSX.
 func exportProject(filePath string, equipment []Equipment) error {
@@ -249,8 +247,12 @@ func exportProject(filePath string, equipment []Equipment) error {
 		case "Вертикальный аппарат":
 			setCellOptFloat(f, sheet, 3, row, eq.VesselDiameter)
 			setCellOptFloat(f, sheet, 4, row, eq.VesselTangentToTangentHeight)
+			setCellOptFloat(f, sheet, 5, row, eq.DesignGaugePressure)
+			setCellOptFloat(f, sheet, 6, row, eq.DesignTemperature)
+			setCellOptFloat(f, sheet, 7, row, eq.SkirtHeight)
+			setCellOptFloat(f, sheet, 8, row, eq.VesselLegHeight)
 			if eq.CalculatedWeight > 0 {
-				setCell(f, sheet, 5, row, eq.CalculatedWeight)
+				setCell(f, sheet, 9, row, eq.CalculatedWeight)
 			}
 
 		case "Горизонтальная емкость":
@@ -264,8 +266,6 @@ func exportProject(filePath string, equipment []Equipment) error {
 
 	return f.SaveAs(filePath)
 }
-
-// ─── Импорт ─────────────────────────────────────────────────
 
 // importProject читает XLSX и возвращает оборудование + ошибки валидации.
 func importProject(filePath string) ([]Equipment, []ImportError) {
@@ -371,6 +371,24 @@ func importProject(filePath string) ([]Equipment, []ImportError) {
 				eq.VesselDiameter, hasError = parseImportFloat(cells, 2, cols, sheet, excelRow, true, &errors, hasError)
 				// Высота (D, обязательный)
 				eq.VesselTangentToTangentHeight, hasError = parseImportFloat(cells, 3, cols, sheet, excelRow, true, &errors, hasError)
+				// Давление (E, опциональный)
+				eq.DesignGaugePressure, hasError = parseImportFloat(cells, 4, cols, sheet, excelRow, false, &errors, hasError)
+				// Температура (F, опциональный)
+				eq.DesignTemperature, hasError = parseImportFloat(cells, 5, cols, sheet, excelRow, false, &errors, hasError)
+				// Высота юбки (G, опциональный)
+				eq.SkirtHeight, hasError = parseImportFloat(cells, 6, cols, sheet, excelRow, false, &errors, hasError)
+				// Высота опор (H, опциональный)
+				eq.VesselLegHeight, hasError = parseImportFloat(cells, 7, cols, sheet, excelRow, false, &errors, hasError)
+
+				if eq.SkirtHeight != nil && eq.VesselLegHeight != nil {
+					errors = append(errors, ImportError{
+						Sheet:  sheet,
+						Row:    excelRow,
+						Column: "Высота юбки / Высота опор",
+						Msg:    "нельзя указывать одновременно высоту юбки и высоту опор",
+					})
+					hasError = true
+				}
 
 			case sheetDrums:
 				eq.Type = "Горизонтальная емкость"
@@ -388,8 +406,6 @@ func importProject(filePath string) ([]Equipment, []ImportError) {
 
 	return equipment, errors
 }
-
-// ─── Хелперы Excel ──────────────────────────────────────────
 
 func setCell(f *excelize.File, sheet string, col, row int, value interface{}) {
 	cell, _ := excelize.CoordinatesToCellName(col, row)

@@ -65,3 +65,57 @@ class PumpPredictor:
 
         logger.info(f"Предсказание: weight_log={weight_log:.4f}, weight_kg={weight_kg:.2f}")
         return float(weight_kg)
+
+# --- VESSEL PREDICTOR ---
+
+VESSEL_FEATURE_COLUMNS = [
+    "liq_volume",
+    "diameter",
+    "ss_distance",
+    "pressure",
+    "sk_height",
+    "leg_height",
+    "p_d_logic",
+    "v_ratio",
+    "surface_area_proxy_log",
+    "volume_proxy_log",
+]
+
+VESSEL_MODELS_DIR = Path(__file__).resolve().parent / "models" / "vessel"
+
+class VesselPredictor:
+    """Предиктор веса сосуда (Vessel) с помощью GradientBoosting."""
+
+    def __init__(self, models_dir: Path = VESSEL_MODELS_DIR):
+        model_path = models_dir / "vessel_model_final.joblib"
+
+        if not model_path.exists():
+            # Если нет в папке models/vessel, проверим в корне ml_service
+            alt_path = Path(__file__).resolve().parent / "vessel_model_final.joblib"
+            if alt_path.exists():
+                model_path = alt_path
+            else:
+                raise FileNotFoundError(f"Файл модели не найден: {model_path}")
+
+        self.model = joblib.load(model_path)
+        logger.info("Модель сосуда загружена успешно (vessel_model_final).")
+
+    def predict(self, features_dict: dict) -> float:
+        # Собираем вектор параметров в нужном порядке
+        raw_features = []
+        for col in VESSEL_FEATURE_COLUMNS:
+            value = features_dict.get(col)
+            if value is None:
+                raise ValueError(f"Отсутствует обязательный параметр для модели: '{col}'")
+            raw_features.append(float(value))
+
+        X = np.array([raw_features])
+
+        # Предсказание (модель возвращает weight_log)
+        weight_log = self.model.predict(X)[0]
+
+        # Обратное преобразование: exp(weight_log) = вес в кг
+        weight_kg = np.exp(weight_log)
+
+        logger.info(f"Предсказание (Vessel): weight_log={weight_log:.4f}, weight_kg={weight_kg:.2f}")
+        return float(weight_kg)
