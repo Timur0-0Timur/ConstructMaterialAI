@@ -59,8 +59,9 @@ type Equipment struct {
 	PowerKW     *float64 `json:"power_kw,omitempty"`
 
 	// Характеристики конвейера
-	ConveyorLength *float64 `json:"conveyor_length,omitempty"`
-	BeltWidth      *float64 `json:"belt_width,omitempty"`
+	ConveyorLength   *float64 `json:"conveyor_length,omitempty"`
+	BeltWidth        *float64 `json:"belt_width,omitempty"`
+	ConveyorFlowRate *float64 `json:"conveyor_flow_rate,omitempty"`
 
 	// Характеристики vessel/drum
 	VesselDiameter               *float64 `json:"vessel_diameter,omitempty"`
@@ -115,9 +116,10 @@ type PumpRequest struct {
 }
 
 type ConveyorRequest struct {
-	Tag            string   `json:"tag"`
-	ConveyorLength *float64 `json:"conveyor_length"`
-	BeltWidth      *float64 `json:"belt_width"`
+	Tag              string   `json:"tag"`
+	ConveyorLength   *float64 `json:"conveyor_length"`
+	BeltWidth        *float64 `json:"belt_width"`
+	ConveyorFlowRate *float64 `json:"conveyor_flow_rate,omitempty"`
 }
 
 type VesselRequest struct {
@@ -134,6 +136,8 @@ type DrumRequest struct {
 	Tag                          string   `json:"tag"`
 	VesselDiameter               *float64 `json:"vessel_diameter"`
 	DesignTangentToTangentLength *float64 `json:"design_tangent_to_tangent_length"`
+	DesignGaugePressure          *float64 `json:"design_gauge_pressure,omitempty"`
+	DesignTemperature            *float64 `json:"design_temperature,omitempty"`
 }
 
 // PumpResponse — ответ от бэкенда
@@ -292,9 +296,10 @@ func sendEquipmentToBackend(eq Equipment) (float64, error) {
 
 	case "Конвейер":
 		req := ConveyorRequest{
-			Tag:            eq.Tag,
-			ConveyorLength: eq.ConveyorLength,
-			BeltWidth:      eq.BeltWidth,
+			Tag:              eq.Tag,
+			ConveyorLength:   eq.ConveyorLength,
+			BeltWidth:        eq.BeltWidth,
+			ConveyorFlowRate: eq.ConveyorFlowRate,
 		}
 		return sendConveyorToBackend(req)
 
@@ -315,6 +320,8 @@ func sendEquipmentToBackend(eq Equipment) (float64, error) {
 			Tag:                          eq.Tag,
 			VesselDiameter:               eq.VesselDiameter,
 			DesignTangentToTangentLength: eq.DesignTangentToTangentLength,
+			DesignGaugePressure:          eq.DesignGaugePressure,
+			DesignTemperature:            eq.DesignTemperature,
 		}
 		return sendDrumToBackend(req)
 
@@ -419,6 +426,8 @@ type equipmentRow struct {
 	conveyorLengthEntry *widget.Entry
 	beltWidthLabel      *canvas.Text
 	beltWidthEntry      *widget.Entry
+	conveyorFlowRateLabel *canvas.Text
+	conveyorFlowRateEntry *widget.Entry
 
 	// Vessel / Drum
 	vesselDiameterLabel               *canvas.Text
@@ -480,7 +489,7 @@ func (r *equipmentRow) refreshTheme() {
 	// Обновляем все лейблы
 	labels := []*canvas.Text{
 		r.flowLabel, r.headLabel, r.rpmLabel, r.specGravityLabel, r.powerLabel,
-		r.conveyorLengthLabel, r.beltWidthLabel,
+		r.conveyorLengthLabel, r.beltWidthLabel, r.conveyorFlowRateLabel,
 		r.vesselDiameterLabel, r.vesselTangentToTangentHeightLabel,
 		r.designGaugePressureLabel, r.designTemperatureLabel,
 		r.skirtHeightLabel, r.vesselLegHeightLabel,
@@ -575,6 +584,11 @@ func (r *equipmentRow) collectEquipment() (Equipment, error) {
 		}
 		eq.BeltWidth = beltWidth
 
+		eq.ConveyorFlowRate, err = parseOptionalFloat(r.conveyorFlowRateEntry.Text)
+		if err != nil {
+			r.markFieldInvalid(r.conveyorFlowRateEntry, r.conveyorFlowRateLabel, true)
+		}
+
 	case "Вертикальный аппарат":
 		vesselDiameter, err := parseOptionalFloat(r.vesselDiameterEntry.Text)
 		if err != nil || vesselDiameter == nil {
@@ -627,6 +641,15 @@ func (r *equipmentRow) collectEquipment() (Equipment, error) {
 			return eq, fmt.Errorf("Длина tangent-to-tangent обязательна")
 		}
 		eq.DesignTangentToTangentLength = designLength
+
+		eq.DesignGaugePressure, err = parseOptionalFloat(r.designGaugePressureEntry.Text)
+		if err != nil {
+			r.markFieldInvalid(r.designGaugePressureEntry, r.designGaugePressureLabel, true)
+		}
+		eq.DesignTemperature, err = parseOptionalFloat(r.designTemperatureEntry.Text)
+		if err != nil {
+			r.markFieldInvalid(r.designTemperatureEntry, r.designTemperatureLabel, true)
+		}
 	}
 
 	return eq, nil
@@ -886,6 +909,7 @@ func (r *equipmentRow) clearValidation() {
 	entries := []*widget.Entry{
 		r.tagEntry, r.qtyEntry, r.flowEntry, r.headEntry, r.rpmEntry,
 		r.specGravityEntry, r.powerEntry, r.conveyorLengthEntry, r.beltWidthEntry,
+		r.conveyorFlowRateEntry,
 		r.vesselDiameterEntry, r.designTangentToTangentLengthEntry,
 		r.vesselTangentToTangentHeightEntry, r.designGaugePressureEntry,
 		r.designTemperatureEntry, r.skirtHeightEntry, r.vesselLegHeightEntry,
@@ -903,6 +927,7 @@ func (r *equipmentRow) clearValidation() {
 	setLabelError(r.powerLabel, false)
 	setLabelError(r.conveyorLengthLabel, false)
 	setLabelError(r.beltWidthLabel, false)
+	setLabelError(r.conveyorFlowRateLabel, false)
 	setLabelError(r.vesselDiameterLabel, false)
 	setLabelError(r.designTangentToTangentLengthLabel, false)
 	setLabelError(r.vesselTangentToTangentHeightLabel, false)
@@ -985,10 +1010,20 @@ func buildConveyorFields(row *equipmentRow) *fyne.Container {
 		val, err := parseOptionalFloat(s)
 		row.markFieldInvalid(row.beltWidthEntry, row.beltWidthLabel, err != nil || val == nil)
 	}
+	
+	conveyorFlowRateLabel, conveyorFlowRateObj := createLabel("Производительность (т/ч):", false)
+	row.conveyorFlowRateLabel = conveyorFlowRateLabel
+	row.conveyorFlowRateEntry = widget.NewEntry()
+	row.conveyorFlowRateEntry.SetPlaceHolder("Введите производительность")
+	row.conveyorFlowRateEntry.OnChanged = func(s string) {
+		_, err := parseOptionalFloat(s)
+		row.markFieldInvalid(row.conveyorFlowRateEntry, row.conveyorFlowRateLabel, err != nil)
+	}
 
 	return container.New(layout.NewFormLayout(),
 		conveyorLengthObj, row.conveyorLengthEntry,
 		beltWidthObj, row.beltWidthEntry,
+		conveyorFlowRateObj, row.conveyorFlowRateEntry,
 	)
 }
 
@@ -1076,9 +1111,29 @@ func buildDrumFields(row *equipmentRow) *fyne.Container {
 		row.markFieldInvalid(row.designTangentToTangentLengthEntry, row.designTangentToTangentLengthLabel, err != nil || val == nil)
 	}
 
+	designGaugePressureLabel, designGaugePressureObj := createLabel("Давление (МПа):", false)
+	row.designGaugePressureLabel = designGaugePressureLabel
+	row.designGaugePressureEntry = widget.NewEntry()
+	row.designGaugePressureEntry.SetPlaceHolder("Давление")
+	row.designGaugePressureEntry.OnChanged = func(s string) {
+		_, err := parseOptionalFloat(s)
+		row.markFieldInvalid(row.designGaugePressureEntry, row.designGaugePressureLabel, err != nil)
+	}
+
+	designTemperatureLabel, designTemperatureObj := createLabel("Температура (°C):", false)
+	row.designTemperatureLabel = designTemperatureLabel
+	row.designTemperatureEntry = widget.NewEntry()
+	row.designTemperatureEntry.SetPlaceHolder("Температура")
+	row.designTemperatureEntry.OnChanged = func(s string) {
+		_, err := parseOptionalFloat(s)
+		row.markFieldInvalid(row.designTemperatureEntry, row.designTemperatureLabel, err != nil)
+	}
+
 	return container.New(layout.NewFormLayout(),
 		vesselDiameterObj, row.vesselDiameterEntry,
 		designTangentToTangentLengthObj, row.designTangentToTangentLengthEntry,
+		designGaugePressureObj, row.designGaugePressureEntry,
+		designTemperatureObj, row.designTemperatureEntry,
 	)
 }
 
@@ -1234,6 +1289,7 @@ func showProject(w fyne.Window, projectName string) {
 		case "Конвейер":
 			row.conveyorLengthEntry.SetText(floatPtrToStr(eq.ConveyorLength))
 			row.beltWidthEntry.SetText(floatPtrToStr(eq.BeltWidth))
+			row.conveyorFlowRateEntry.SetText(floatPtrToStr(eq.ConveyorFlowRate))
 		case "Вертикальный аппарат":
 			row.vesselDiameterEntry.SetText(floatPtrToStr(eq.VesselDiameter))
 			row.vesselTangentToTangentHeightEntry.SetText(floatPtrToStr(eq.VesselTangentToTangentHeight))
@@ -1244,6 +1300,8 @@ func showProject(w fyne.Window, projectName string) {
 		case "Горизонтальная емкость":
 			row.vesselDiameterEntry.SetText(floatPtrToStr(eq.VesselDiameter))
 			row.designTangentToTangentLengthEntry.SetText(floatPtrToStr(eq.DesignTangentToTangentLength))
+			row.designGaugePressureEntry.SetText(floatPtrToStr(eq.DesignGaugePressure))
+			row.designTemperatureEntry.SetText(floatPtrToStr(eq.DesignTemperature))
 		}
 
 		calcBtn := widget.NewButtonWithIcon("Рассчитать", theme.ConfirmIcon(), func() {
