@@ -69,16 +69,17 @@ class PumpPredictor:
 # --- VESSEL PREDICTOR ---
 
 VESSEL_FEATURE_COLUMNS = [
-    "liq_volume",
-    "diameter",
-    "ss_distance",
-    "pressure",
+    "log_liq_volume",
+    "log_diameter",
+    "log_ss_distance",
+    "log_p_abs",
+    "log_area_calc",
+    "log_thick_proxy",
+    "des_temp",
     "sk_height",
     "leg_height",
-    "p_d_logic",
-    "v_ratio",
-    "surface_area_proxy_log",
-    "volume_proxy_log",
+    "has_skirt",
+    "has_legs"
 ]
 
 VESSEL_MODELS_DIR = Path(__file__).resolve().parent / "models" / "vessel"
@@ -118,4 +119,52 @@ class VesselPredictor:
         weight_kg = np.exp(weight_log)
 
         logger.info(f"Предсказание (Vessel): weight_log={weight_log:.4f}, weight_kg={weight_kg:.2f}")
+        return float(weight_kg)
+
+# --- CONVEYOR PREDICTOR ---
+
+CONVEYOR_FEATURE_COLUMNS = [
+    "log_length_ft",
+    "log_width_in",
+    "log_flow_tph",
+    "log_belt_surface_area",
+    "log_load_proxy",
+]
+
+CONVEYOR_MODELS_DIR = Path(__file__).resolve().parent / "models" / "conveyer"
+
+class ConveyorPredictor:
+    """Предиктор веса конвейера с помощью HistGradientBoosting."""
+
+    def __init__(self, models_dir: Path = CONVEYOR_MODELS_DIR):
+        model_path = models_dir / "conveyor_model_final.joblib"
+
+        if not model_path.exists():
+            alt_path = Path(__file__).resolve().parent / "conveyor_model_final.joblib"
+            if alt_path.exists():
+                model_path = alt_path
+            else:
+                raise FileNotFoundError(f"Файл модели не найден: {model_path}")
+
+        self.model = joblib.load(model_path)
+        logger.info("Модель конвейера загружена успешно (conveyor_model_final).")
+
+    def predict(self, features_dict: dict) -> float:
+        # Собираем вектор параметров в нужном порядке
+        raw_features = []
+        for col in CONVEYOR_FEATURE_COLUMNS:
+            value = features_dict.get(col)
+            if value is None:
+                raise ValueError(f"Отсутствует обязательный параметр для модели: '{col}'")
+            raw_features.append(float(value))
+
+        X = np.array([raw_features])
+
+        # Предсказание (модель возвращает weight_kg_log = log1p(weight_kg))
+        weight_log = self.model.predict(X)[0]
+
+        # Обратное преобразование: expm1(weight_log) = вес в кг
+        weight_kg = np.expm1(weight_log)
+
+        logger.info(f"Предсказание (Conveyor): weight_log={weight_log:.4f}, weight_kg={weight_kg:.2f}")
         return float(weight_kg)

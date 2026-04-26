@@ -31,6 +31,8 @@ const (
 	conveyorBackendURL = "http://localhost:8080/conveyor/estimate"
 	vesselBackendURL   = "http://localhost:8080/vessel/estimate"
 	drumBackendURL     = "http://localhost:8080/drum/estimate"
+	windowWidth        = 1100
+	windowHeight       = 750
 )
 
 var equipmentTypes = []string{
@@ -57,8 +59,9 @@ type Equipment struct {
 	PowerKW     *float64 `json:"power_kw,omitempty"`
 
 	// Характеристики конвейера
-	ConveyorLength *float64 `json:"conveyor_length,omitempty"`
-	BeltWidth      *float64 `json:"belt_width,omitempty"`
+	ConveyorLength   *float64 `json:"conveyor_length,omitempty"`
+	BeltWidth        *float64 `json:"belt_width,omitempty"`
+	ConveyorFlowRate *float64 `json:"conveyor_flow_rate,omitempty"`
 
 	// Характеристики vessel/drum
 	VesselDiameter               *float64 `json:"vessel_diameter,omitempty"`
@@ -79,6 +82,22 @@ type Project struct {
 	Equipment []Equipment `json:"equipment"`
 }
 
+func (p Project) TotalWeight() float64 {
+	var total float64
+	for _, eq := range p.Equipment {
+		total += eq.CalculatedWeight * float64(eq.Quantity)
+	}
+	return total
+}
+
+func (p Project) EquipmentCount() int {
+	var count int
+	for _, eq := range p.Equipment {
+		count += eq.Quantity
+	}
+	return count
+}
+
 // AppData — корневая структура для JSON-файла
 type AppData struct {
 	Projects []Project `json:"projects"`
@@ -97,9 +116,10 @@ type PumpRequest struct {
 }
 
 type ConveyorRequest struct {
-	Tag            string   `json:"tag"`
-	ConveyorLength *float64 `json:"conveyor_length"`
-	BeltWidth      *float64 `json:"belt_width"`
+	Tag              string   `json:"tag"`
+	ConveyorLength   *float64 `json:"conveyor_length"`
+	BeltWidth        *float64 `json:"belt_width"`
+	ConveyorFlowRate *float64 `json:"conveyor_flow_rate,omitempty"`
 }
 
 type VesselRequest struct {
@@ -116,6 +136,8 @@ type DrumRequest struct {
 	Tag                          string   `json:"tag"`
 	VesselDiameter               *float64 `json:"vessel_diameter"`
 	DesignTangentToTangentLength *float64 `json:"design_tangent_to_tangent_length"`
+	DesignGaugePressure          *float64 `json:"design_gauge_pressure,omitempty"`
+	DesignTemperature            *float64 `json:"design_temperature,omitempty"`
 }
 
 // PumpResponse — ответ от бэкенда
@@ -274,9 +296,10 @@ func sendEquipmentToBackend(eq Equipment) (float64, error) {
 
 	case "Конвейер":
 		req := ConveyorRequest{
-			Tag:            eq.Tag,
-			ConveyorLength: eq.ConveyorLength,
-			BeltWidth:      eq.BeltWidth,
+			Tag:              eq.Tag,
+			ConveyorLength:   eq.ConveyorLength,
+			BeltWidth:        eq.BeltWidth,
+			ConveyorFlowRate: eq.ConveyorFlowRate,
 		}
 		return sendConveyorToBackend(req)
 
@@ -297,6 +320,8 @@ func sendEquipmentToBackend(eq Equipment) (float64, error) {
 			Tag:                          eq.Tag,
 			VesselDiameter:               eq.VesselDiameter,
 			DesignTangentToTangentLength: eq.DesignTangentToTangentLength,
+			DesignGaugePressure:          eq.DesignGaugePressure,
+			DesignTemperature:            eq.DesignTemperature,
 		}
 		return sendDrumToBackend(req)
 
@@ -354,6 +379,27 @@ func floatPtrToStr(p *float64) string {
 	return fmt.Sprintf("%.2f", *p)
 }
 
+// ─── UI: Карточка проекта ───────────────────────────────────
+
+type projectCard struct {
+	project   Project
+	container *fyne.Container
+	bg        *canvas.Rectangle
+	accent    *canvas.Rectangle
+}
+
+func (c *projectCard) refreshTheme() {
+	v := fyne.CurrentApp().Settings().ThemeVariant()
+	if c.bg != nil {
+		c.bg.FillColor = theme.Current().Color(ColorNameCardBackground, v)
+		c.bg.Refresh()
+	}
+	if c.accent != nil {
+		c.accent.FillColor = theme.PrimaryColor()
+		c.accent.Refresh()
+	}
+}
+
 // ─── UI: строка оборудования ─────────────────────────────────
 
 // equipmentRow хранит ссылки на виджеты одной строки
@@ -380,6 +426,8 @@ type equipmentRow struct {
 	conveyorLengthEntry *widget.Entry
 	beltWidthLabel      *canvas.Text
 	beltWidthEntry      *widget.Entry
+	conveyorFlowRateLabel *canvas.Text
+	conveyorFlowRateEntry *widget.Entry
 
 	// Vessel / Drum
 	vesselDiameterLabel               *canvas.Text
@@ -403,7 +451,72 @@ type equipmentRow struct {
 	// Результат
 	resultLabel *widget.Label
 	expandBtn   *widget.Button
+	deleteBtn   *widget.Button
 	container   *fyne.Container
+
+	// Фоны для обновления темы
+	cardBg    *canvas.Rectangle
+	accentBar *canvas.Rectangle
+	expandBg  *canvas.Rectangle
+	deleteBg  *canvas.Rectangle
+}
+
+func (r *equipmentRow) refreshTheme() {
+	v := fyne.CurrentApp().Settings().ThemeVariant()
+	if r.cardBg != nil {
+		r.cardBg.FillColor = theme.Current().Color(ColorNameCardBackground, v)
+		r.cardBg.Refresh()
+	}
+	if r.accentBar != nil {
+		r.accentBar.FillColor = theme.PrimaryColor()
+		r.accentBar.Refresh()
+	}
+	if r.expandBg != nil {
+		r.expandBg.FillColor = theme.Current().Color(theme.ColorNameInputBackground, v)
+		r.expandBg.Refresh()
+	}
+	if r.deleteBg != nil {
+		r.deleteBg.FillColor = theme.Current().Color(theme.ColorNameInputBackground, v)
+		r.deleteBg.Refresh()
+	}
+	if r.expandBtn != nil {
+		r.expandBtn.Refresh()
+	}
+	if r.deleteBtn != nil {
+		r.deleteBtn.Refresh()
+	}
+
+	// Обновляем все лейблы
+	labels := []*canvas.Text{
+		r.flowLabel, r.headLabel, r.rpmLabel, r.specGravityLabel, r.powerLabel,
+		r.conveyorLengthLabel, r.beltWidthLabel, r.conveyorFlowRateLabel,
+		r.vesselDiameterLabel, r.vesselTangentToTangentHeightLabel,
+		r.designGaugePressureLabel, r.designTemperatureLabel,
+		r.skirtHeightLabel, r.vesselLegHeightLabel,
+		r.designTangentToTangentLengthLabel,
+	}
+	for _, l := range labels {
+		if l != nil {
+			l.Color = theme.ForegroundColor()
+			l.Refresh()
+		}
+	}
+
+	// Стиль кнопок-подложек
+	// (Они используют InputBackgroundColor)
+	r.container.Refresh()
+}
+
+func (r *equipmentRow) markFieldInvalid(e *widget.Entry, label *canvas.Text, hasError bool) {
+	if e == nil {
+		return
+	}
+	if hasError {
+		e.SetValidationError(fmt.Errorf("invalid"))
+	} else {
+		e.SetValidationError(nil)
+	}
+	setLabelError(label, hasError)
 }
 
 // collectEquipment собирает данные из виджетов строки
@@ -416,11 +529,13 @@ func (r *equipmentRow) collectEquipment() (Equipment, error) {
 	}
 
 	if eq.Tag == "" {
+		r.markFieldInvalid(r.tagEntry, nil, true)
 		return eq, fmt.Errorf("Тэг обязателен")
 	}
 
 	q, err := strconv.Atoi(strings.TrimSpace(r.qtyEntry.Text))
 	if err != nil || q < 1 {
+		r.markFieldInvalid(r.qtyEntry, nil, true)
 		return eq, fmt.Errorf("Кол-во должно быть >= 1")
 	}
 	eq.Quantity = q
@@ -429,77 +544,112 @@ func (r *equipmentRow) collectEquipment() (Equipment, error) {
 	case "Насосы":
 		flow, err := parseOptionalFloat(r.flowEntry.Text)
 		if err != nil || flow == nil {
-			setLabelError(r.flowLabel, true)
+			r.markFieldInvalid(r.flowEntry, r.flowLabel, true)
 			return eq, fmt.Errorf("Расход (Flow Rate) обязателен")
 		}
 		eq.FlowRate = flow
 
 		head, err := parseOptionalFloat(r.headEntry.Text)
 		if err != nil || head == nil {
-			setLabelError(r.headLabel, true)
+			r.markFieldInvalid(r.headEntry, r.headLabel, true)
 			return eq, fmt.Errorf("Напор (Fluid Head) обязателен")
 		}
 		eq.FluidHead = head
 
-		eq.RPM, _ = parseOptionalFloat(r.rpmEntry.Text)
-		eq.SpecGravity, _ = parseOptionalFloat(r.specGravityEntry.Text)
-		eq.PowerKW, _ = parseOptionalFloat(r.powerEntry.Text)
+		eq.RPM, err = parseOptionalFloat(r.rpmEntry.Text)
+		if err != nil {
+			r.markFieldInvalid(r.rpmEntry, r.rpmLabel, true)
+		}
+		eq.SpecGravity, err = parseOptionalFloat(r.specGravityEntry.Text)
+		if err != nil {
+			r.markFieldInvalid(r.specGravityEntry, r.specGravityLabel, true)
+		}
+		eq.PowerKW, err = parseOptionalFloat(r.powerEntry.Text)
+		if err != nil {
+			r.markFieldInvalid(r.powerEntry, r.powerLabel, true)
+		}
 
 	case "Конвейер":
 		conveyorLength, err := parseOptionalFloat(r.conveyorLengthEntry.Text)
 		if err != nil || conveyorLength == nil {
-			setLabelError(r.conveyorLengthLabel, true)
+			r.markFieldInvalid(r.conveyorLengthEntry, r.conveyorLengthLabel, true)
 			return eq, fmt.Errorf("Длина конвейера (Conveyor Length) обязательна")
 		}
 		eq.ConveyorLength = conveyorLength
 
 		beltWidth, err := parseOptionalFloat(r.beltWidthEntry.Text)
 		if err != nil || beltWidth == nil {
-			setLabelError(r.beltWidthLabel, true)
+			r.markFieldInvalid(r.beltWidthEntry, r.beltWidthLabel, true)
 			return eq, fmt.Errorf("Ширина ленты (Belt Width) обязательна")
 		}
 		eq.BeltWidth = beltWidth
 
+		eq.ConveyorFlowRate, err = parseOptionalFloat(r.conveyorFlowRateEntry.Text)
+		if err != nil {
+			r.markFieldInvalid(r.conveyorFlowRateEntry, r.conveyorFlowRateLabel, true)
+		}
+
 	case "Вертикальный аппарат":
 		vesselDiameter, err := parseOptionalFloat(r.vesselDiameterEntry.Text)
 		if err != nil || vesselDiameter == nil {
-			setLabelError(r.vesselDiameterLabel, true)
+			r.markFieldInvalid(r.vesselDiameterEntry, r.vesselDiameterLabel, true)
 			return eq, fmt.Errorf("Диаметр аппарата (Vessel Diameter) обязателен")
 		}
 		eq.VesselDiameter = vesselDiameter
 
 		vesselHeight, err := parseOptionalFloat(r.vesselTangentToTangentHeightEntry.Text)
 		if err != nil || vesselHeight == nil {
-			setLabelError(r.vesselTangentToTangentHeightLabel, true)
+			r.markFieldInvalid(r.vesselTangentToTangentHeightEntry, r.vesselTangentToTangentHeightLabel, true)
 			return eq, fmt.Errorf("Высота tangent-to-tangent обязательна")
 		}
 		eq.VesselTangentToTangentHeight = vesselHeight
 
-		eq.DesignGaugePressure, _ = parseOptionalFloat(r.designGaugePressureEntry.Text)
-		eq.DesignTemperature, _ = parseOptionalFloat(r.designTemperatureEntry.Text)
-		eq.SkirtHeight, _ = parseOptionalFloat(r.skirtHeightEntry.Text)
-		eq.VesselLegHeight, _ = parseOptionalFloat(r.vesselLegHeightEntry.Text)
+		eq.DesignGaugePressure, err = parseOptionalFloat(r.designGaugePressureEntry.Text)
+		if err != nil {
+			r.markFieldInvalid(r.designGaugePressureEntry, r.designGaugePressureLabel, true)
+		}
+		eq.DesignTemperature, err = parseOptionalFloat(r.designTemperatureEntry.Text)
+		if err != nil {
+			r.markFieldInvalid(r.designTemperatureEntry, r.designTemperatureLabel, true)
+		}
+		eq.SkirtHeight, err = parseOptionalFloat(r.skirtHeightEntry.Text)
+		if err != nil {
+			r.markFieldInvalid(r.skirtHeightEntry, r.skirtHeightLabel, true)
+		}
+		eq.VesselLegHeight, err = parseOptionalFloat(r.vesselLegHeightEntry.Text)
+		if err != nil {
+			r.markFieldInvalid(r.vesselLegHeightEntry, r.vesselLegHeightLabel, true)
+		}
 
 		if eq.SkirtHeight != nil && eq.VesselLegHeight != nil {
-			setLabelError(r.skirtHeightLabel, true)
-			setLabelError(r.vesselLegHeightLabel, true)
+			r.markFieldInvalid(r.skirtHeightEntry, r.skirtHeightLabel, true)
+			r.markFieldInvalid(r.vesselLegHeightEntry, r.vesselLegHeightLabel, true)
 			return eq, fmt.Errorf("Нельзя указывать одновременно высоту юбки и высоту опор")
 		}
 
 	case "Горизонтальная емкость":
 		vesselDiameter, err := parseOptionalFloat(r.vesselDiameterEntry.Text)
 		if err != nil || vesselDiameter == nil {
-			setLabelError(r.vesselDiameterLabel, true)
+			r.markFieldInvalid(r.vesselDiameterEntry, r.vesselDiameterLabel, true)
 			return eq, fmt.Errorf("Диаметр аппарата (Vessel Diameter) обязателен")
 		}
 		eq.VesselDiameter = vesselDiameter
 
 		designLength, err := parseOptionalFloat(r.designTangentToTangentLengthEntry.Text)
 		if err != nil || designLength == nil {
-			setLabelError(r.designTangentToTangentLengthLabel, true)
+			r.markFieldInvalid(r.designTangentToTangentLengthEntry, r.designTangentToTangentLengthLabel, true)
 			return eq, fmt.Errorf("Длина tangent-to-tangent обязательна")
 		}
 		eq.DesignTangentToTangentLength = designLength
+
+		eq.DesignGaugePressure, err = parseOptionalFloat(r.designGaugePressureEntry.Text)
+		if err != nil {
+			r.markFieldInvalid(r.designGaugePressureEntry, r.designGaugePressureLabel, true)
+		}
+		eq.DesignTemperature, err = parseOptionalFloat(r.designTemperatureEntry.Text)
+		if err != nil {
+			r.markFieldInvalid(r.designTemperatureEntry, r.designTemperatureLabel, true)
+		}
 	}
 
 	return eq, nil
@@ -531,45 +681,126 @@ func showStartScreen(w fyne.Window) {
 	)
 
 	w.SetContent(container.NewPadded(content))
+	w.Resize(fyne.NewSize(windowWidth, windowHeight))
+}
+
+// createProjectCard — создает визуальный блок проекта
+func createProjectCard(w fyne.Window, proj Project, onOpen func(), onDelete func()) *projectCard {
+	card := &projectCard{project: proj}
+
+	title := widget.NewLabelWithStyle(proj.Name, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	title.Truncation = fyne.TextTruncateEllipsis
+
+	eqCount := proj.EquipmentCount()
+	weight := proj.TotalWeight()
+
+	info := widget.NewLabel(fmt.Sprintf("Оборудование: %d | Вес: %.2f кг", eqCount, weight))
+	info.TextStyle = fyne.TextStyle{Italic: true}
+
+	openBtn := widget.NewButtonWithIcon("Открыть", theme.FolderOpenIcon(), onOpen)
+	openBtn.Importance = widget.HighImportance
+
+	deleteBtn := widget.NewButtonWithIcon("", theme.DeleteIcon(), onDelete)
+	deleteBtn.Importance = widget.LowImportance
+
+	v := fyne.CurrentApp().Settings().ThemeVariant()
+	card.bg = canvas.NewRectangle(theme.Current().Color(ColorNameCardBackground, v))
+	card.bg.CornerRadius = 12
+
+	card.accent = canvas.NewRectangle(theme.PrimaryColor())
+	card.accent.SetMinSize(fyne.NewSize(4, 0))
+
+	content := container.NewPadded(container.NewHBox(
+		card.accent,
+		container.NewVBox(
+			title,
+			info,
+		),
+		layout.NewSpacer(),
+		container.NewHBox(openBtn, deleteBtn),
+	))
+
+	card.container = container.NewStack(card.bg, content)
+	return card
 }
 
 // showProjectList — экран выбора / создания проекта
 func showProjectList(w fyne.Window) {
 	appData := loadProjects()
 
-	title := widget.NewLabel("Проекты")
+	title := widget.NewLabel("Менеджер проектов")
 	title.Alignment = fyne.TextAlignCenter
 	title.TextStyle = fyne.TextStyle{Bold: true}
 
+	// Панель статистики
+	totalProjectsLabel := widget.NewLabel("")
+
+	updateStats := func() {
+		totalProjectsLabel.SetText(fmt.Sprintf("Всего проектов: %d", len(appData.Projects)))
+	}
+	updateStats()
+
+	statsBar := container.NewHBox(
+		container.NewPadded(totalProjectsLabel),
+		layout.NewSpacer(),
+	)
+
 	projectList := container.NewVBox()
-	for i := range appData.Projects {
-		idx := i
-		proj := appData.Projects[idx]
+	cards := []*projectCard{}
 
-		openBtn := widget.NewButtonWithIcon(proj.Name, theme.FolderOpenIcon(), func() {
-			showProject(w, proj.Name)
-		})
+	renderProjects := func(filter string) {
+		projectList.RemoveAll()
+		cards = []*projectCard{}
+		filter = strings.ToLower(filter)
 
-		deleteBtn := widget.NewButtonWithIcon("", theme.DeleteIcon(), func() {
-			dialog.ShowConfirm("Удалить проект",
-				fmt.Sprintf("Удалить проект «%s»?", proj.Name),
-				func(ok bool) {
-					if !ok {
-						return
-					}
-					appData.Projects = append(appData.Projects[:idx], appData.Projects[idx+1:]...)
-					_ = saveProjects(appData)
-					showProjectList(w)
-				}, w)
-		})
+		found := false
+		for i := range appData.Projects {
+			idx := i
+			proj := appData.Projects[idx]
 
-		row := container.NewHBox(openBtn, layout.NewSpacer(), deleteBtn)
-		projectList.Add(row)
+			if filter != "" && !strings.Contains(strings.ToLower(proj.Name), filter) {
+				continue
+			}
+			found = true
+
+			card := createProjectCard(w, proj,
+				func() {
+					showProject(w, proj.Name)
+				},
+				func() {
+					dialog.ShowConfirm("Удалить проект",
+						fmt.Sprintf("Удалить проект «%s»?", proj.Name),
+						func(ok bool) {
+							if !ok {
+								return
+							}
+							appData.Projects = append(appData.Projects[:idx], appData.Projects[idx+1:]...)
+							_ = saveProjects(appData)
+							showProjectList(w)
+						}, w)
+				})
+			cards = append(cards, card)
+			projectList.Add(container.NewPadded(card.container))
+		}
+
+		if !found {
+			msg := "Нет проектов"
+			if filter != "" {
+				msg = "Ничего не найдено"
+			}
+			projectList.Add(container.NewCenter(container.NewVBox(
+				widget.NewLabel(""),
+				widget.NewLabel(msg),
+			)))
+		}
+		projectList.Refresh()
 	}
 
-	if len(appData.Projects) == 0 {
-		projectList.Add(widget.NewLabel("Нет проектов. Создайте новый."))
-	}
+	searchEntry := widget.NewEntry()
+	searchEntry.SetPlaceHolder("Поиск проекта...")
+	searchEntry.OnChanged = renderProjects
+
+	renderProjects("")
 
 	createBtn := widget.NewButtonWithIcon("Создать проект", theme.ContentAddIcon(), func() {
 		nameEntry := widget.NewEntry()
@@ -601,51 +832,94 @@ func showProjectList(w fyne.Window) {
 		showStartScreen(w)
 	})
 
-	scrollable := container.NewVScroll(projectList)
-	scrollable.SetMinSize(fyne.NewSize(400, 300))
+	themeBtn := widget.NewButtonWithIcon("", theme.ColorPaletteIcon(), func() {
+		current := fyne.CurrentApp().Settings().Theme()
+		if m, ok := current.(*modernTheme); ok && m.variant == theme.VariantDark {
+			fyne.CurrentApp().Settings().SetTheme(newModernLightTheme())
+		} else {
+			fyne.CurrentApp().Settings().SetTheme(newModernDarkTheme())
+		}
+		// Обновляем карточки
+		for _, c := range cards {
+			c.refreshTheme()
+		}
+		w.Content().Refresh()
+	})
 
-	content := container.NewVBox(
-		backBtn,
+	scrollable := container.NewVScroll(projectList)
+	scrollable.SetMinSize(fyne.NewSize(600, 400))
+
+	header := container.NewVBox(
+		container.NewHBox(backBtn, layout.NewSpacer(), themeBtn),
 		title,
+		statsBar,
+		container.NewPadded(searchEntry),
 		widget.NewSeparator(),
+	)
+
+	content := container.NewBorder(
+		header,
+		container.NewPadded(createBtn),
+		nil, nil,
 		scrollable,
-		layout.NewSpacer(),
-		createBtn,
 	)
 
 	w.SetContent(container.NewPadded(content))
+	w.Resize(fyne.NewSize(windowWidth, windowHeight))
 }
 
 func createLabel(text string, required bool) (*canvas.Text, fyne.CanvasObject) {
 	t := canvas.NewText(text, theme.ForegroundColor())
-	t.TextSize = theme.TextSize()
+	t.TextSize = theme.TextSize() + 1 // Чуть больше
+	t.TextStyle.Bold = true           // Жирнее
 
+	var finalObj fyne.CanvasObject
 	if !required {
-		return t, t
+		finalObj = t
+	} else {
+		ast := canvas.NewText(" *", color.NRGBA{R: 255, G: 0, B: 0, A: 255})
+		ast.TextSize = t.TextSize
+		ast.TextStyle.Bold = true
+		finalObj = container.NewHBox(t, ast)
 	}
 
-	ast := canvas.NewText(" *", color.NRGBA{R: 255, G: 0, B: 0, A: 255})
-	ast.TextSize = theme.TextSize()
-	ast.TextStyle.Bold = true
-
-	return t, container.NewHBox(t, ast)
+	// Оборачиваем в контейнер с фиксированной шириной для выравнивания во всех карточках
+	return t, container.NewGridWrap(fyne.NewSize(260, 40), finalObj)
 }
 
 func setLabelError(t *canvas.Text, hasError bool) {
 	if t == nil {
 		return
 	}
-	if hasError {
-		t.Color = color.NRGBA{R: 255, G: 0, B: 0, A: 255}
-		t.TextStyle.Bold = true
-	} else {
+	fyne.Do(func() {
 		t.Color = theme.ForegroundColor()
-		t.TextStyle.Bold = false
-	}
-	t.Refresh()
+		if hasError {
+			t.TextStyle.Bold = true
+		} else {
+			// Для обычных полей оставляем Bold=true, как в createLabel,
+			// чтобы не "прыгал" текст при валидации.
+			t.TextStyle.Bold = true
+		}
+		t.Refresh()
+	})
 }
 
 func (r *equipmentRow) clearValidation() {
+	// Очистка валидации для всех полей
+	entries := []*widget.Entry{
+		r.tagEntry, r.qtyEntry, r.flowEntry, r.headEntry, r.rpmEntry,
+		r.specGravityEntry, r.powerEntry, r.conveyorLengthEntry, r.beltWidthEntry,
+		r.conveyorFlowRateEntry,
+		r.vesselDiameterEntry, r.designTangentToTangentLengthEntry,
+		r.vesselTangentToTangentHeightEntry, r.designGaugePressureEntry,
+		r.designTemperatureEntry, r.skirtHeightEntry, r.vesselLegHeightEntry,
+	}
+	for _, e := range entries {
+		if e != nil {
+			e.SetValidationError(nil)
+		}
+	}
+
 	setLabelError(r.flowLabel, false)
 	setLabelError(r.headLabel, false)
 	setLabelError(r.rpmLabel, false)
@@ -653,6 +927,7 @@ func (r *equipmentRow) clearValidation() {
 	setLabelError(r.powerLabel, false)
 	setLabelError(r.conveyorLengthLabel, false)
 	setLabelError(r.beltWidthLabel, false)
+	setLabelError(r.conveyorFlowRateLabel, false)
 	setLabelError(r.vesselDiameterLabel, false)
 	setLabelError(r.designTangentToTangentLengthLabel, false)
 	setLabelError(r.vesselTangentToTangentHeightLabel, false)
@@ -667,26 +942,46 @@ func buildPumpFields(row *equipmentRow) *fyne.Container {
 	row.flowLabel = flowLabel
 	row.flowEntry = widget.NewEntry()
 	row.flowEntry.SetPlaceHolder("Введите расход (обязательно)")
+	row.flowEntry.OnChanged = func(s string) {
+		val, err := parseOptionalFloat(s)
+		row.markFieldInvalid(row.flowEntry, row.flowLabel, err != nil || val == nil)
+	}
 
 	headLabel, headObj := createLabel("Напор (м):", true)
 	row.headLabel = headLabel
 	row.headEntry = widget.NewEntry()
 	row.headEntry.SetPlaceHolder("Введите напор (обязательно)")
+	row.headEntry.OnChanged = func(s string) {
+		val, err := parseOptionalFloat(s)
+		row.markFieldInvalid(row.headEntry, row.headLabel, err != nil || val == nil)
+	}
 
 	rpmLabel, rpmObj := createLabel("Частота вращения (об/мин):", false)
 	row.rpmLabel = rpmLabel
 	row.rpmEntry = widget.NewEntry()
 	row.rpmEntry.SetPlaceHolder("Частота вращения (об/мин)")
+	row.rpmEntry.OnChanged = func(s string) {
+		_, err := parseOptionalFloat(s)
+		row.markFieldInvalid(row.rpmEntry, row.rpmLabel, err != nil)
+	}
 
 	specGravityLabel, specGravityObj := createLabel("Удельный вес:", false)
 	row.specGravityLabel = specGravityLabel
 	row.specGravityEntry = widget.NewEntry()
 	row.specGravityEntry.SetPlaceHolder("Удельный вес")
+	row.specGravityEntry.OnChanged = func(s string) {
+		_, err := parseOptionalFloat(s)
+		row.markFieldInvalid(row.specGravityEntry, row.specGravityLabel, err != nil)
+	}
 
 	powerLabel, powerObj := createLabel("Мощность (кВт):", false)
 	row.powerLabel = powerLabel
 	row.powerEntry = widget.NewEntry()
 	row.powerEntry.SetPlaceHolder("Мощность (кВт)")
+	row.powerEntry.OnChanged = func(s string) {
+		_, err := parseOptionalFloat(s)
+		row.markFieldInvalid(row.powerEntry, row.powerLabel, err != nil)
+	}
 
 	return container.New(layout.NewFormLayout(),
 		flowObj, row.flowEntry,
@@ -702,48 +997,90 @@ func buildConveyorFields(row *equipmentRow) *fyne.Container {
 	row.conveyorLengthLabel = conveyorLengthLabel
 	row.conveyorLengthEntry = widget.NewEntry()
 	row.conveyorLengthEntry.SetPlaceHolder("Введите длину (обязательно)")
+	row.conveyorLengthEntry.OnChanged = func(s string) {
+		val, err := parseOptionalFloat(s)
+		row.markFieldInvalid(row.conveyorLengthEntry, row.conveyorLengthLabel, err != nil || val == nil)
+	}
 
 	beltWidthLabel, beltWidthObj := createLabel("Ширина ленты (мм):", true)
 	row.beltWidthLabel = beltWidthLabel
 	row.beltWidthEntry = widget.NewEntry()
 	row.beltWidthEntry.SetPlaceHolder("Введите ширину (обязательно)")
+	row.beltWidthEntry.OnChanged = func(s string) {
+		val, err := parseOptionalFloat(s)
+		row.markFieldInvalid(row.beltWidthEntry, row.beltWidthLabel, err != nil || val == nil)
+	}
+	
+	conveyorFlowRateLabel, conveyorFlowRateObj := createLabel("Производительность (т/ч):", false)
+	row.conveyorFlowRateLabel = conveyorFlowRateLabel
+	row.conveyorFlowRateEntry = widget.NewEntry()
+	row.conveyorFlowRateEntry.SetPlaceHolder("Введите производительность")
+	row.conveyorFlowRateEntry.OnChanged = func(s string) {
+		_, err := parseOptionalFloat(s)
+		row.markFieldInvalid(row.conveyorFlowRateEntry, row.conveyorFlowRateLabel, err != nil)
+	}
 
 	return container.New(layout.NewFormLayout(),
 		conveyorLengthObj, row.conveyorLengthEntry,
 		beltWidthObj, row.beltWidthEntry,
+		conveyorFlowRateObj, row.conveyorFlowRateEntry,
 	)
 }
 
 func buildVesselFields(row *equipmentRow) *fyne.Container {
-	vesselDiameterLabel, vesselDiameterObj := createLabel("Диаметр аппарата (мм):", true)
+	vesselDiameterLabel, vesselDiameterObj := createLabel("Диаметр аппарата (м):", true)
 	row.vesselDiameterLabel = vesselDiameterLabel
 	row.vesselDiameterEntry = widget.NewEntry()
-	row.vesselDiameterEntry.SetPlaceHolder("Введите диаметр (обязательно)")
+	row.vesselDiameterEntry.SetPlaceHolder("Диаметр корпуса (м)")
+	row.vesselDiameterEntry.OnChanged = func(s string) {
+		val, err := parseOptionalFloat(s)
+		row.markFieldInvalid(row.vesselDiameterEntry, row.vesselDiameterLabel, err != nil || val == nil)
+	}
 
-	vesselTangentToTangentHeightLabel, vesselTangentToTangentHeightObj := createLabel("Высота (T/T, мм):", true)
+	vesselTangentToTangentHeightLabel, vesselTangentToTangentHeightObj := createLabel("Высота (T/T, м):", true)
 	row.vesselTangentToTangentHeightLabel = vesselTangentToTangentHeightLabel
 	row.vesselTangentToTangentHeightEntry = widget.NewEntry()
-	row.vesselTangentToTangentHeightEntry.SetPlaceHolder("Введите высоту (обязательно)")
+	row.vesselTangentToTangentHeightEntry.SetPlaceHolder("Высота Straight Side (м)")
+	row.vesselTangentToTangentHeightEntry.OnChanged = func(s string) {
+		val, err := parseOptionalFloat(s)
+		row.markFieldInvalid(row.vesselTangentToTangentHeightEntry, row.vesselTangentToTangentHeightLabel, err != nil || val == nil)
+	}
 
 	designGaugePressureLabel, designGaugePressureObj := createLabel("Давление (МПа):", false)
 	row.designGaugePressureLabel = designGaugePressureLabel
 	row.designGaugePressureEntry = widget.NewEntry()
 	row.designGaugePressureEntry.SetPlaceHolder("Давление")
+	row.designGaugePressureEntry.OnChanged = func(s string) {
+		_, err := parseOptionalFloat(s)
+		row.markFieldInvalid(row.designGaugePressureEntry, row.designGaugePressureLabel, err != nil)
+	}
 
 	designTemperatureLabel, designTemperatureObj := createLabel("Температура (°C):", false)
 	row.designTemperatureLabel = designTemperatureLabel
 	row.designTemperatureEntry = widget.NewEntry()
 	row.designTemperatureEntry.SetPlaceHolder("Температура")
+	row.designTemperatureEntry.OnChanged = func(s string) {
+		_, err := parseOptionalFloat(s)
+		row.markFieldInvalid(row.designTemperatureEntry, row.designTemperatureLabel, err != nil)
+	}
 
-	skirtHeightLabel, skirtHeightObj := createLabel("Высота юбки (мм):", false)
+	skirtHeightLabel, skirtHeightObj := createLabel("Высота юбки (м):", false)
 	row.skirtHeightLabel = skirtHeightLabel
 	row.skirtHeightEntry = widget.NewEntry()
-	row.skirtHeightEntry.SetPlaceHolder("Высота юбки")
+	row.skirtHeightEntry.SetPlaceHolder("Высота юбки (м)")
+	row.skirtHeightEntry.OnChanged = func(s string) {
+		_, err := parseOptionalFloat(s)
+		row.markFieldInvalid(row.skirtHeightEntry, row.skirtHeightLabel, err != nil)
+	}
 
-	vesselLegHeightLabel, vesselLegHeightObj := createLabel("Высота опор (мм):", false)
+	vesselLegHeightLabel, vesselLegHeightObj := createLabel("Высота опор (м):", false)
 	row.vesselLegHeightLabel = vesselLegHeightLabel
 	row.vesselLegHeightEntry = widget.NewEntry()
-	row.vesselLegHeightEntry.SetPlaceHolder("Высота опор")
+	row.vesselLegHeightEntry.SetPlaceHolder("Высота опор (м)")
+	row.vesselLegHeightEntry.OnChanged = func(s string) {
+		_, err := parseOptionalFloat(s)
+		row.markFieldInvalid(row.vesselLegHeightEntry, row.vesselLegHeightLabel, err != nil)
+	}
 
 	return container.New(layout.NewFormLayout(),
 		vesselDiameterObj, row.vesselDiameterEntry,
@@ -760,15 +1097,43 @@ func buildDrumFields(row *equipmentRow) *fyne.Container {
 	row.vesselDiameterLabel = vesselDiameterLabel
 	row.vesselDiameterEntry = widget.NewEntry()
 	row.vesselDiameterEntry.SetPlaceHolder("Введите диаметр (обязательно)")
+	row.vesselDiameterEntry.OnChanged = func(s string) {
+		val, err := parseOptionalFloat(s)
+		row.markFieldInvalid(row.vesselDiameterEntry, row.vesselDiameterLabel, err != nil || val == nil)
+	}
 
 	designTangentToTangentLengthLabel, designTangentToTangentLengthObj := createLabel("Длина (T/T, мм):", true)
 	row.designTangentToTangentLengthLabel = designTangentToTangentLengthLabel
 	row.designTangentToTangentLengthEntry = widget.NewEntry()
 	row.designTangentToTangentLengthEntry.SetPlaceHolder("Введите длину (обязательно)")
+	row.designTangentToTangentLengthEntry.OnChanged = func(s string) {
+		val, err := parseOptionalFloat(s)
+		row.markFieldInvalid(row.designTangentToTangentLengthEntry, row.designTangentToTangentLengthLabel, err != nil || val == nil)
+	}
+
+	designGaugePressureLabel, designGaugePressureObj := createLabel("Давление (МПа):", false)
+	row.designGaugePressureLabel = designGaugePressureLabel
+	row.designGaugePressureEntry = widget.NewEntry()
+	row.designGaugePressureEntry.SetPlaceHolder("Давление")
+	row.designGaugePressureEntry.OnChanged = func(s string) {
+		_, err := parseOptionalFloat(s)
+		row.markFieldInvalid(row.designGaugePressureEntry, row.designGaugePressureLabel, err != nil)
+	}
+
+	designTemperatureLabel, designTemperatureObj := createLabel("Температура (°C):", false)
+	row.designTemperatureLabel = designTemperatureLabel
+	row.designTemperatureEntry = widget.NewEntry()
+	row.designTemperatureEntry.SetPlaceHolder("Температура")
+	row.designTemperatureEntry.OnChanged = func(s string) {
+		_, err := parseOptionalFloat(s)
+		row.markFieldInvalid(row.designTemperatureEntry, row.designTemperatureLabel, err != nil)
+	}
 
 	return container.New(layout.NewFormLayout(),
 		vesselDiameterObj, row.vesselDiameterEntry,
 		designTangentToTangentLengthObj, row.designTangentToTangentLengthEntry,
+		designGaugePressureObj, row.designGaugePressureEntry,
+		designTemperatureObj, row.designTemperatureEntry,
 	)
 }
 
@@ -795,48 +1160,54 @@ func showProject(w fyne.Window, projectName string) {
 	rowsContainer := container.NewVBox()
 	var rows []*equipmentRow
 
-	totalWeightLabel := widget.NewLabel("Общий вес: —")
+	totalWeightLabel := widget.NewLabel("—")
 	totalWeightLabel.TextStyle = fyne.TextStyle{Bold: true}
+	totalWeightLabel.Alignment = fyne.TextAlignLeading
 	byTypeLabel := widget.NewLabel("По типам: —")
 
 	recalcAll := func() {
 		var grandTotal float64
 		typeWeights := make(map[string]float64)
 
-		for _, r := range rows {
-			eq, err := r.collectEquipment()
-			if err != nil {
-				continue
-			}
+		// Чтение данных из виджетов должно происходить в основном потоке
+		fyne.DoAndWait(func() {
+			for _, r := range rows {
+				eq, err := r.collectEquipment()
+				if err != nil {
+					continue
+				}
 
-			var unitWeight float64
-			text := r.resultLabel.Text
-			if strings.HasSuffix(text, " кг/ед.") {
-				text = strings.TrimSuffix(text, " кг/ед.")
-				text = strings.TrimPrefix(text, "✓ ")
-				unitWeight, _ = strconv.ParseFloat(text, 64)
-			}
+				var unitWeight float64
+				text := r.resultLabel.Text
+				if strings.HasSuffix(text, " кг/ед.") {
+					text = strings.TrimSuffix(text, " кг/ед.")
+					text = strings.TrimPrefix(text, "✓ ")
+					unitWeight, _ = strconv.ParseFloat(text, 64)
+				}
 
-			lineTotal := unitWeight * float64(eq.Quantity)
-			grandTotal += lineTotal
-			if unitWeight > 0 {
-				typeWeights[eq.Type] += lineTotal
+				lineTotal := unitWeight * float64(eq.Quantity)
+				grandTotal += lineTotal
+				if unitWeight > 0 {
+					typeWeights[eq.Type] += lineTotal
+				}
 			}
-		}
+		})
 
-		totalWeightLabel.SetText(fmt.Sprintf("Общий вес: %.2f кг", grandTotal))
+		fyne.Do(func() {
+			totalWeightLabel.SetText(fmt.Sprintf("%.2f кг", grandTotal))
 
-		var parts []string
-		for _, t := range equipmentTypes {
-			if ww, ok := typeWeights[t]; ok && ww > 0 {
-				parts = append(parts, fmt.Sprintf("%s: %.2f кг", t, ww))
+			var parts []string
+			for _, t := range equipmentTypes {
+				if ww, ok := typeWeights[t]; ok && ww > 0 {
+					parts = append(parts, fmt.Sprintf("%s: %.2f кг", t, ww))
+				}
 			}
-		}
-		if len(parts) > 0 {
-			byTypeLabel.SetText("По типам: " + strings.Join(parts, " | "))
-		} else {
-			byTypeLabel.SetText("По типам: —")
-		}
+			if len(parts) > 0 {
+				byTypeLabel.SetText("По типам: " + strings.Join(parts, " | "))
+			} else {
+				byTypeLabel.SetText("По типам: —")
+			}
+		})
 	}
 
 	removeRow := func(target *equipmentRow) {
@@ -880,7 +1251,10 @@ func showProject(w fyne.Window, projectName string) {
 		row.tagEntry = widget.NewEntry()
 		row.tagEntry.SetPlaceHolder("Тэг / Имя")
 		row.tagEntry.SetText(eq.Tag)
-		tagContainer := container.NewGridWrap(fyne.NewSize(150, 36), row.tagEntry)
+		row.tagEntry.OnChanged = func(s string) {
+			row.markFieldInvalid(row.tagEntry, nil, strings.TrimSpace(s) == "")
+		}
+		tagContainer := container.NewGridWrap(fyne.NewSize(150, 40), row.tagEntry)
 
 		row.qtyEntry = widget.NewEntry()
 		row.qtyEntry.SetPlaceHolder("Кол-во")
@@ -889,16 +1263,21 @@ func showProject(w fyne.Window, projectName string) {
 		} else {
 			row.qtyEntry.SetText("1")
 		}
+		row.qtyEntry.OnChanged = func(s string) {
+			q, err := strconv.Atoi(strings.TrimSpace(s))
+			row.markFieldInvalid(row.qtyEntry, nil, err != nil || q < 1)
+		}
 
 		row.resultLabel = widget.NewLabel("—")
 		row.resultLabel.TextStyle = fyne.TextStyle{Bold: true}
 
 		if eq.CalculatedWeight > 0 {
-			row.resultLabel.SetText(fmt.Sprintf("✓ %.2f кг/ед.", eq.CalculatedWeight))
+			row.resultLabel.SetText(fmt.Sprintf("%.2f кг/ед.", eq.CalculatedWeight))
 		}
 
 		currentType := row.typeSelect.Selected
 		row.fieldsContainer = buildFieldsByType(row, currentType)
+		qtyContainer := container.NewGridWrap(fyne.NewSize(70, 40), row.qtyEntry)
 
 		switch currentType {
 		case "Насосы":
@@ -910,6 +1289,7 @@ func showProject(w fyne.Window, projectName string) {
 		case "Конвейер":
 			row.conveyorLengthEntry.SetText(floatPtrToStr(eq.ConveyorLength))
 			row.beltWidthEntry.SetText(floatPtrToStr(eq.BeltWidth))
+			row.conveyorFlowRateEntry.SetText(floatPtrToStr(eq.ConveyorFlowRate))
 		case "Вертикальный аппарат":
 			row.vesselDiameterEntry.SetText(floatPtrToStr(eq.VesselDiameter))
 			row.vesselTangentToTangentHeightEntry.SetText(floatPtrToStr(eq.VesselTangentToTangentHeight))
@@ -920,6 +1300,8 @@ func showProject(w fyne.Window, projectName string) {
 		case "Горизонтальная емкость":
 			row.vesselDiameterEntry.SetText(floatPtrToStr(eq.VesselDiameter))
 			row.designTangentToTangentLengthEntry.SetText(floatPtrToStr(eq.DesignTangentToTangentLength))
+			row.designGaugePressureEntry.SetText(floatPtrToStr(eq.DesignGaugePressure))
+			row.designTemperatureEntry.SetText(floatPtrToStr(eq.DesignTemperature))
 		}
 
 		calcBtn := widget.NewButtonWithIcon("Рассчитать", theme.ConfirmIcon(), func() {
@@ -929,25 +1311,34 @@ func showProject(w fyne.Window, projectName string) {
 				return
 			}
 
-			row.resultLabel.SetText("⏳ Расчёт...")
-			row.resultLabel.Refresh()
+			fyne.Do(func() {
+				row.resultLabel.SetText("⏳ Расчёт...")
+				row.resultLabel.Refresh()
+			})
 
 			go func() {
 				weight, err := sendEquipmentToBackend(eqData)
-				if err != nil {
-					row.resultLabel.SetText("✗ " + err.Error())
-				} else {
-					row.resultLabel.SetText(fmt.Sprintf("✓ %.2f кг/ед.", weight))
-				}
-				row.resultLabel.Refresh()
-				recalcAll()
+				fyne.Do(func() {
+					if err != nil {
+						row.resultLabel.SetText("✗ " + err.Error())
+					} else {
+						row.resultLabel.SetText(fmt.Sprintf("%.2f кг/ед.", weight))
+					}
+					row.resultLabel.Refresh()
+					recalcAll()
+				})
 			}()
 		})
 		calcBtn.Importance = widget.HighImportance
 
-		deleteBtn := widget.NewButtonWithIcon("", theme.DeleteIcon(), func() {
+		row.deleteBtn = widget.NewButtonWithIcon("", theme.DeleteIcon(), func() {
 			removeRow(row)
 		})
+		row.deleteBtn.Importance = widget.LowImportance
+
+		row.deleteBg = canvas.NewRectangle(theme.InputBackgroundColor())
+		row.deleteBg.CornerRadius = theme.InputRadiusSize()
+		styledDeleteBtn := container.NewStack(row.deleteBg, row.deleteBtn)
 
 		row.typeSelect.OnChanged = func(selected string) {
 			newFields := buildFieldsByType(row, selected)
@@ -975,23 +1366,54 @@ func showProject(w fyne.Window, projectName string) {
 		})
 		row.expandBtn.Importance = widget.LowImportance
 
+		// Стилизуем кнопку сворачивания
+		row.expandBg = canvas.NewRectangle(theme.InputBackgroundColor())
+		row.expandBg.CornerRadius = theme.InputRadiusSize()
+		styledExpandBtn := container.NewGridWrap(fyne.NewSize(40, 40), container.NewStack(row.expandBg, row.expandBtn))
+
+		// Создаем "карточный" заголовок
+		weightHeaderLabel := widget.NewLabelWithStyle("Вес единицы:", fyne.TextAlignTrailing, fyne.TextStyle{Bold: true})
+
 		topRow := container.NewHBox(
-			row.expandBtn,
-			row.typeSelect,
+			styledExpandBtn,
+			container.NewGridWrap(fyne.NewSize(180, 40), row.typeSelect),
 			tagContainer,
-			widget.NewLabel("Кол-во:"),
-			row.qtyEntry,
-			calcBtn,
-			row.resultLabel,
+			container.NewHBox(widget.NewLabel("Кол-во:"), qtyContainer),
 			layout.NewSpacer(),
-			deleteBtn,
+			container.NewHBox(
+				weightHeaderLabel,
+				row.resultLabel,
+			),
+			container.NewGridWrap(fyne.NewSize(140, 40), calcBtn),
+			container.NewGridWrap(fyne.NewSize(40, 40), styledDeleteBtn),
 		)
 
-		row.container = container.NewVBox(
+		// Настройка внешнего вида результата
+		row.resultLabel.Alignment = fyne.TextAlignTrailing
+		row.resultLabel.TextStyle = fyne.TextStyle{Bold: true}
+
+		// Оборачиваем в карточку с фоном и акцентом
+		v := fyne.CurrentApp().Settings().ThemeVariant()
+		row.cardBg = canvas.NewRectangle(theme.Current().Color(ColorNameCardBackground, v))
+		row.cardBg.CornerRadius = 12
+
+		row.accentBar = canvas.NewRectangle(theme.PrimaryColor())
+		row.accentBar.SetMinSize(fyne.NewSize(4, 0))
+
+		content := container.NewPadded(container.NewVBox(
 			topRow,
-			row.fieldsContainer,
-			widget.NewSeparator(),
+			container.NewPadded(row.fieldsContainer),
+		))
+
+		cardContent := container.NewHBox(row.accentBar, content)
+
+		row.container = container.NewStack(
+			row.cardBg,
+			cardContent,
 		)
+
+		// Добавим отступы между карточками
+		row.container = container.NewPadded(row.container)
 
 		rows = append(rows, row)
 		rowsContainer.Add(row.container)
@@ -1008,25 +1430,34 @@ func showProject(w fyne.Window, projectName string) {
 	addBtn.Importance = widget.HighImportance
 
 	calcAllBtn := widget.NewButtonWithIcon("Рассчитать всё", theme.ComputerIcon(), func() {
-		totalWeightLabel.SetText("⏳ Расчёт...")
+		fyne.Do(func() {
+			totalWeightLabel.SetText("⏳ Расчёт...")
+		})
 
 		go func() {
 			for _, r := range rows {
-				eq, err := r.collectEquipment()
+				var eq Equipment
+				var err error
+				fyne.DoAndWait(func() {
+					eq, err = r.collectEquipment()
+					if err == nil {
+						r.resultLabel.SetText("⏳...")
+						r.resultLabel.Refresh()
+					}
+				})
 				if err != nil {
 					continue
 				}
 
-				r.resultLabel.SetText("⏳...")
-				r.resultLabel.Refresh()
-
 				weight, err := sendEquipmentToBackend(eq)
-				if err != nil {
-					r.resultLabel.SetText("✗ " + err.Error())
-				} else {
-					r.resultLabel.SetText(fmt.Sprintf("✓ %.2f кг/ед.", weight))
-				}
-				r.resultLabel.Refresh()
+				fyne.Do(func() {
+					if err != nil {
+						r.resultLabel.SetText("✗ " + err.Error())
+					} else {
+						r.resultLabel.SetText(fmt.Sprintf("%.2f кг/ед.", weight))
+					}
+					r.resultLabel.Refresh()
+				})
 			}
 			recalcAll()
 		}()
@@ -1043,7 +1474,6 @@ func showProject(w fyne.Window, projectName string) {
 			text := r.resultLabel.Text
 			if strings.HasSuffix(text, " кг/ед.") {
 				text = strings.TrimSuffix(text, " кг/ед.")
-				text = strings.TrimPrefix(text, "✓ ")
 				eq.CalculatedWeight, _ = strconv.ParseFloat(text, 64)
 			}
 			equipment = append(equipment, eq)
@@ -1065,7 +1495,10 @@ func showProject(w fyne.Window, projectName string) {
 
 	footer := container.NewVBox(
 		widget.NewSeparator(),
-		totalWeightLabel,
+		container.NewHBox(
+			widget.NewLabelWithStyle("Итоговый вес проекта:", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+			totalWeightLabel,
+		),
 		byTypeLabel,
 	)
 
@@ -1229,22 +1662,33 @@ func showProject(w fyne.Window, projectName string) {
 			})
 			calcBtn := widget.NewButton("Провести расчёт", func() {
 				// Запускаем расчёт всех строк
-				totalWeightLabel.SetText("⏳ Расчёт...")
+				fyne.Do(func() {
+					totalWeightLabel.SetText("⏳ Расчёт...")
+				})
 				go func() {
 					for _, r := range rows {
-						eq, err := r.collectEquipment()
+						var eq Equipment
+						var err error
+						fyne.DoAndWait(func() {
+							eq, err = r.collectEquipment()
+							if err == nil {
+								r.resultLabel.SetText("⏳...")
+								r.resultLabel.Refresh()
+							}
+						})
 						if err != nil {
 							continue
 						}
-						r.resultLabel.SetText("⏳...")
-						r.resultLabel.Refresh()
+
 						weight, err := sendEquipmentToBackend(eq)
-						if err != nil {
-							r.resultLabel.SetText("✗ " + err.Error())
-						} else {
-							r.resultLabel.SetText(fmt.Sprintf("✓ %.2f кг/ед.", weight))
-						}
-						r.resultLabel.Refresh()
+						fyne.Do(func() {
+							if err != nil {
+								r.resultLabel.SetText("✗ " + err.Error())
+							} else {
+								r.resultLabel.SetText(fmt.Sprintf("✓ %.2f кг/ед.", weight))
+							}
+							r.resultLabel.Refresh()
+						})
 					}
 					recalcAll()
 
@@ -1281,22 +1725,33 @@ func showProject(w fyne.Window, projectName string) {
 			}
 			calcBtn.OnTapped = func() {
 				warningDialog.Hide()
-				totalWeightLabel.SetText("⏳ Расчёт...")
+				fyne.Do(func() {
+					totalWeightLabel.SetText("⏳ Расчёт...")
+				})
 				go func() {
 					for _, r := range rows {
-						eq, err := r.collectEquipment()
+						var eq Equipment
+						var err error
+						fyne.DoAndWait(func() {
+							eq, err = r.collectEquipment()
+							if err == nil {
+								r.resultLabel.SetText("⏳...")
+								r.resultLabel.Refresh()
+							}
+						})
 						if err != nil {
 							continue
 						}
-						r.resultLabel.SetText("⏳...")
-						r.resultLabel.Refresh()
+
 						weight, err := sendEquipmentToBackend(eq)
-						if err != nil {
-							r.resultLabel.SetText("✗ " + err.Error())
-						} else {
-							r.resultLabel.SetText(fmt.Sprintf("✓ %.2f кг/ед.", weight))
-						}
-						r.resultLabel.Refresh()
+						fyne.Do(func() {
+							if err != nil {
+								r.resultLabel.SetText("✗ " + err.Error())
+							} else {
+								r.resultLabel.SetText(fmt.Sprintf("%.2f кг/ед.", weight))
+							}
+							r.resultLabel.Refresh()
+						})
 					}
 					recalcAll()
 
@@ -1323,16 +1778,36 @@ func showProject(w fyne.Window, projectName string) {
 		}
 	})
 
-	toolbar := container.NewHBox(
+	themeBtn := widget.NewButtonWithIcon("", theme.ColorPaletteIcon(), func() {
+		current := fyne.CurrentApp().Settings().Theme()
+		if m, ok := current.(*modernTheme); ok && m.variant == theme.VariantDark {
+			fyne.CurrentApp().Settings().SetTheme(newModernLightTheme())
+		} else {
+			fyne.CurrentApp().Settings().SetTheme(newModernDarkTheme())
+		}
+
+		// Обновляем все существующие строки оборудования
+		for _, r := range rows {
+			r.refreshTheme()
+		}
+		w.Content().Refresh()
+	})
+
+	toolbarTop := container.NewHBox(
 		backBtn,
 		layout.NewSpacer(),
+		themeBtn,
 		helpBtn,
+	)
+
+	toolbarActions := container.NewHBox(
 		templateBtn,
 		importBtn,
 		exportBtn,
 		widget.NewSeparator(),
 		collapseAllBtn,
 		expandAllBtn,
+		layout.NewSpacer(),
 		addBtn,
 	)
 
@@ -1342,21 +1817,23 @@ func showProject(w fyne.Window, projectName string) {
 	)
 
 	content := container.NewBorder(
-		container.NewVBox(toolbar, title, widget.NewSeparator()),
+		container.NewVBox(toolbarTop, toolbarActions, title, widget.NewSeparator()),
 		container.NewVBox(footer, bottomButtons),
 		nil, nil,
 		scrollable,
 	)
 
 	w.SetContent(container.NewPadded(content))
+	w.Resize(fyne.NewSize(windowWidth, windowHeight))
 }
 
 func main() {
 	fmt.Println("Запуск десктопного приложения...")
 
 	myApp := app.New()
+	myApp.Settings().SetTheme(newModernDarkTheme())
 	myWindow := myApp.NewWindow("ConstructMaterialAI: Учёт оборудования")
-	myWindow.Resize(fyne.NewSize(900, 650))
+	myWindow.Resize(fyne.NewSize(windowWidth, windowHeight))
 
 	showStartScreen(myWindow)
 

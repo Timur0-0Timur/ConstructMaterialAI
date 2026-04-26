@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional, Any, Dict
 
-from .service import get_pump_estimation, get_vessel_estimation
+from .service import get_pump_estimation, get_vessel_estimation, get_conveyor_estimation
 
 app = FastAPI(title="Pump Data/ML Service", version="1.0.0")
 
@@ -122,11 +122,12 @@ def vessel_estimate(req: VesselRequest):
 def conveyor_estimate(req: ConveyorRequest):
     try:
         input_data = req.model_dump()
-        # TODO: здесь позже будет вызов модели для conveyor
+        result = get_conveyor_estimation(input_data)
+
         return Response(
             model_version=MODEL_VERSION,
-            weight=7007.0,               # заглушка
-            debug_features=input_data
+            weight=result["weight"],
+            debug_features=result["features"]
         )
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

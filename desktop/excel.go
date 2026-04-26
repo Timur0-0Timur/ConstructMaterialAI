@@ -44,6 +44,7 @@ var conveyorColumns = []colDef{
 	{"Кол-во", true},
 	{"Длина (м)", true},
 	{"Ширина (мм)", true},
+	{"Производительность (т/ч)", false},
 	{"Вес (кг)", false},
 }
 
@@ -64,6 +65,8 @@ var drumColumns = []colDef{
 	{"Кол-во", true},
 	{"Диаметр (мм)", true},
 	{"Длина T/T (мм)", true},
+	{"Давление (МПа)", false},
+	{"Темп. (°C)", false},
 	{"Вес (кг)", false},
 }
 
@@ -240,8 +243,9 @@ func exportProject(filePath string, equipment []Equipment) error {
 		case "Конвейер":
 			setCellOptFloat(f, sheet, 3, row, eq.ConveyorLength)
 			setCellOptFloat(f, sheet, 4, row, eq.BeltWidth)
+			setCellOptFloat(f, sheet, 5, row, eq.ConveyorFlowRate)
 			if eq.CalculatedWeight > 0 {
-				setCell(f, sheet, 5, row, eq.CalculatedWeight)
+				setCell(f, sheet, 6, row, eq.CalculatedWeight)
 			}
 
 		case "Вертикальный аппарат":
@@ -258,8 +262,10 @@ func exportProject(filePath string, equipment []Equipment) error {
 		case "Горизонтальная емкость":
 			setCellOptFloat(f, sheet, 3, row, eq.VesselDiameter)
 			setCellOptFloat(f, sheet, 4, row, eq.DesignTangentToTangentLength)
+			setCellOptFloat(f, sheet, 5, row, eq.DesignGaugePressure)
+			setCellOptFloat(f, sheet, 6, row, eq.DesignTemperature)
 			if eq.CalculatedWeight > 0 {
-				setCell(f, sheet, 5, row, eq.CalculatedWeight)
+				setCell(f, sheet, 7, row, eq.CalculatedWeight)
 			}
 		}
 	}
@@ -364,6 +370,8 @@ func importProject(filePath string) ([]Equipment, []ImportError) {
 				eq.ConveyorLength, hasError = parseImportFloat(cells, 2, cols, sheet, excelRow, true, &errors, hasError)
 				// Ширина (D, обязательный)
 				eq.BeltWidth, hasError = parseImportFloat(cells, 3, cols, sheet, excelRow, true, &errors, hasError)
+				// Производительность (E, опциональный)
+				eq.ConveyorFlowRate, hasError = parseImportFloat(cells, 4, cols, sheet, excelRow, false, &errors, hasError)
 
 			case sheetVessels:
 				eq.Type = "Вертикальный аппарат"
@@ -396,6 +404,10 @@ func importProject(filePath string) ([]Equipment, []ImportError) {
 				eq.VesselDiameter, hasError = parseImportFloat(cells, 2, cols, sheet, excelRow, true, &errors, hasError)
 				// Длина (D, обязательный)
 				eq.DesignTangentToTangentLength, hasError = parseImportFloat(cells, 3, cols, sheet, excelRow, true, &errors, hasError)
+				// Давление (E, опциональный)
+				eq.DesignGaugePressure, hasError = parseImportFloat(cells, 4, cols, sheet, excelRow, false, &errors, hasError)
+				// Температура (F, опциональный)
+				eq.DesignTemperature, hasError = parseImportFloat(cells, 5, cols, sheet, excelRow, false, &errors, hasError)
 			}
 
 			if !hasError {
