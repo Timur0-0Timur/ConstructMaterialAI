@@ -69,16 +69,17 @@ class PumpPredictor:
 # --- VESSEL PREDICTOR ---
 
 VESSEL_FEATURE_COLUMNS = [
-    "liq_volume",
-    "diameter",
-    "ss_distance",
-    "pressure",
+    "log_liq_volume",
+    "log_diameter",
+    "log_ss_distance",
+    "log_p_abs",
+    "log_area_calc",
+    "log_thick_proxy",
+    "des_temp",
     "sk_height",
     "leg_height",
-    "p_d_logic",
-    "v_ratio",
-    "surface_area_proxy_log",
-    "volume_proxy_log",
+    "has_skirt",
+    "has_legs"
 ]
 
 VESSEL_MODELS_DIR = Path(__file__).resolve().parent / "models" / "vessel"

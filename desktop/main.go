@@ -993,19 +993,19 @@ func buildConveyorFields(row *equipmentRow) *fyne.Container {
 }
 
 func buildVesselFields(row *equipmentRow) *fyne.Container {
-	vesselDiameterLabel, vesselDiameterObj := createLabel("Диаметр аппарата (мм):", true)
+	vesselDiameterLabel, vesselDiameterObj := createLabel("Диаметр аппарата (м):", true)
 	row.vesselDiameterLabel = vesselDiameterLabel
 	row.vesselDiameterEntry = widget.NewEntry()
-	row.vesselDiameterEntry.SetPlaceHolder("Введите диаметр (обязательно)")
+	row.vesselDiameterEntry.SetPlaceHolder("Диаметр корпуса (м)")
 	row.vesselDiameterEntry.OnChanged = func(s string) {
 		val, err := parseOptionalFloat(s)
 		row.markFieldInvalid(row.vesselDiameterEntry, row.vesselDiameterLabel, err != nil || val == nil)
 	}
 
-	vesselTangentToTangentHeightLabel, vesselTangentToTangentHeightObj := createLabel("Высота (T/T, мм):", true)
+	vesselTangentToTangentHeightLabel, vesselTangentToTangentHeightObj := createLabel("Высота (T/T, м):", true)
 	row.vesselTangentToTangentHeightLabel = vesselTangentToTangentHeightLabel
 	row.vesselTangentToTangentHeightEntry = widget.NewEntry()
-	row.vesselTangentToTangentHeightEntry.SetPlaceHolder("Введите высоту (обязательно)")
+	row.vesselTangentToTangentHeightEntry.SetPlaceHolder("Высота Straight Side (м)")
 	row.vesselTangentToTangentHeightEntry.OnChanged = func(s string) {
 		val, err := parseOptionalFloat(s)
 		row.markFieldInvalid(row.vesselTangentToTangentHeightEntry, row.vesselTangentToTangentHeightLabel, err != nil || val == nil)
@@ -1029,19 +1029,19 @@ func buildVesselFields(row *equipmentRow) *fyne.Container {
 		row.markFieldInvalid(row.designTemperatureEntry, row.designTemperatureLabel, err != nil)
 	}
 
-	skirtHeightLabel, skirtHeightObj := createLabel("Высота юбки (мм):", false)
+	skirtHeightLabel, skirtHeightObj := createLabel("Высота юбки (м):", false)
 	row.skirtHeightLabel = skirtHeightLabel
 	row.skirtHeightEntry = widget.NewEntry()
-	row.skirtHeightEntry.SetPlaceHolder("Высота юбки")
+	row.skirtHeightEntry.SetPlaceHolder("Высота юбки (м)")
 	row.skirtHeightEntry.OnChanged = func(s string) {
 		_, err := parseOptionalFloat(s)
 		row.markFieldInvalid(row.skirtHeightEntry, row.skirtHeightLabel, err != nil)
 	}
 
-	vesselLegHeightLabel, vesselLegHeightObj := createLabel("Высота опор (мм):", false)
+	vesselLegHeightLabel, vesselLegHeightObj := createLabel("Высота опор (м):", false)
 	row.vesselLegHeightLabel = vesselLegHeightLabel
 	row.vesselLegHeightEntry = widget.NewEntry()
-	row.vesselLegHeightEntry.SetPlaceHolder("Высота опор")
+	row.vesselLegHeightEntry.SetPlaceHolder("Высота опор (м)")
 	row.vesselLegHeightEntry.OnChanged = func(s string) {
 		_, err := parseOptionalFloat(s)
 		row.markFieldInvalid(row.vesselLegHeightEntry, row.vesselLegHeightLabel, err != nil)
