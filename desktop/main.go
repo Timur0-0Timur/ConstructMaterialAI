@@ -403,7 +403,60 @@ type equipmentRow struct {
 	// Результат
 	resultLabel *widget.Label
 	expandBtn   *widget.Button
+	deleteBtn   *widget.Button
 	container   *fyne.Container
+
+	// Фоны для обновления темы
+	cardBg    *canvas.Rectangle
+	accentBar *canvas.Rectangle
+	expandBg  *canvas.Rectangle
+	deleteBg  *canvas.Rectangle
+}
+
+func (r *equipmentRow) refreshTheme() {
+	v := fyne.CurrentApp().Settings().ThemeVariant()
+	if r.cardBg != nil {
+		r.cardBg.FillColor = theme.Current().Color(ColorNameCardBackground, v)
+		r.cardBg.Refresh()
+	}
+	if r.accentBar != nil {
+		r.accentBar.FillColor = theme.PrimaryColor()
+		r.accentBar.Refresh()
+	}
+	if r.expandBg != nil {
+		r.expandBg.FillColor = theme.Current().Color(theme.ColorNameInputBackground, v)
+		r.expandBg.Refresh()
+	}
+	if r.deleteBg != nil {
+		r.deleteBg.FillColor = theme.Current().Color(theme.ColorNameInputBackground, v)
+		r.deleteBg.Refresh()
+	}
+	if r.expandBtn != nil {
+		r.expandBtn.Refresh()
+	}
+	if r.deleteBtn != nil {
+		r.deleteBtn.Refresh()
+	}
+
+	// Обновляем все лейблы
+	labels := []*canvas.Text{
+		r.flowLabel, r.headLabel, r.rpmLabel, r.specGravityLabel, r.powerLabel,
+		r.conveyorLengthLabel, r.beltWidthLabel,
+		r.vesselDiameterLabel, r.vesselTangentToTangentHeightLabel,
+		r.designGaugePressureLabel, r.designTemperatureLabel,
+		r.skirtHeightLabel, r.vesselLegHeightLabel,
+		r.designTangentToTangentLengthLabel,
+	}
+	for _, l := range labels {
+		if l != nil {
+			l.Color = theme.ForegroundColor()
+			l.Refresh()
+		}
+	}
+
+	// Стиль кнопок-подложек
+	// (Они используют InputBackgroundColor)
+	r.container.Refresh()
 }
 
 func (r *equipmentRow) markFieldInvalid(e *widget.Entry, label *canvas.Text, hasError bool) {
@@ -639,8 +692,18 @@ func showProjectList(w fyne.Window) {
 	scrollable := container.NewVScroll(projectList)
 	scrollable.SetMinSize(fyne.NewSize(400, 300))
 
+	themeBtn := widget.NewButtonWithIcon("", theme.ColorPaletteIcon(), func() {
+		current := fyne.CurrentApp().Settings().Theme()
+		if m, ok := current.(*modernTheme); ok && m.variant == theme.VariantDark {
+			fyne.CurrentApp().Settings().SetTheme(newModernLightTheme())
+		} else {
+			fyne.CurrentApp().Settings().SetTheme(newModernDarkTheme())
+		}
+		w.Content().Refresh()
+	})
+
 	content := container.NewVBox(
-		backBtn,
+		container.NewHBox(backBtn, layout.NewSpacer(), themeBtn),
 		title,
 		widget.NewSeparator(),
 		scrollable,
@@ -652,7 +715,7 @@ func showProjectList(w fyne.Window) {
 }
 
 func createLabel(text string, required bool) (*canvas.Text, fyne.CanvasObject) {
-	t := canvas.NewText(text, color.NRGBA{R: 248, G: 250, B: 252, A: 255})
+	t := canvas.NewText(text, theme.ForegroundColor())
 	t.TextSize = theme.TextSize() + 1 // Чуть больше
 	t.TextStyle.Bold = true           // Жирнее
 
@@ -674,9 +737,7 @@ func setLabelError(t *canvas.Text, hasError bool) {
 	if t == nil {
 		return
 	}
-	// Мы больше не меняем цвет текста на красный по просьбе пользователя.
-	// Оставляем цвет Slate 50 (белый), но можем оставить жирное начертание для акцента.
-	t.Color = color.NRGBA{R: 248, G: 250, B: 252, A: 255} 
+	t.Color = theme.ForegroundColor()
 	if hasError {
 		t.TextStyle.Bold = true
 	} else {
@@ -1069,14 +1130,14 @@ func showProject(w fyne.Window, projectName string) {
 		})
 		calcBtn.Importance = widget.HighImportance
 
-		deleteBtn := widget.NewButtonWithIcon("", theme.DeleteIcon(), func() {
+		row.deleteBtn = widget.NewButtonWithIcon("", theme.DeleteIcon(), func() {
 			removeRow(row)
 		})
-		deleteBtn.Importance = widget.LowImportance
+		row.deleteBtn.Importance = widget.LowImportance
 
-		deleteBg := canvas.NewRectangle(theme.Current().Color(theme.ColorNameInputBackground, theme.VariantDark))
-		deleteBg.CornerRadius = theme.Current().Size(theme.SizeNameInputRadius)
-		styledDeleteBtn := container.NewStack(deleteBg, deleteBtn)
+		row.deleteBg = canvas.NewRectangle(theme.InputBackgroundColor())
+		row.deleteBg.CornerRadius = theme.InputRadiusSize()
+		styledDeleteBtn := container.NewStack(row.deleteBg, row.deleteBtn)
 
 		row.typeSelect.OnChanged = func(selected string) {
 			newFields := buildFieldsByType(row, selected)
@@ -1105,9 +1166,9 @@ func showProject(w fyne.Window, projectName string) {
 		row.expandBtn.Importance = widget.LowImportance
 
 		// Стилизуем кнопку сворачивания
-		expandBg := canvas.NewRectangle(theme.Current().Color(theme.ColorNameInputBackground, theme.VariantDark))
-		expandBg.CornerRadius = theme.Current().Size(theme.SizeNameInputRadius)
-		styledExpandBtn := container.NewGridWrap(fyne.NewSize(40, 40), container.NewStack(expandBg, row.expandBtn))
+		row.expandBg = canvas.NewRectangle(theme.InputBackgroundColor())
+		row.expandBg.CornerRadius = theme.InputRadiusSize()
+		styledExpandBtn := container.NewGridWrap(fyne.NewSize(40, 40), container.NewStack(row.expandBg, row.expandBtn))
 
 		// Создаем "карточный" заголовок
 		weightHeaderLabel := widget.NewLabelWithStyle("Вес единицы:", fyne.TextAlignTrailing, fyne.TextStyle{Bold: true})
@@ -1131,21 +1192,22 @@ func showProject(w fyne.Window, projectName string) {
 		row.resultLabel.TextStyle = fyne.TextStyle{Bold: true}
 
 		// Оборачиваем в карточку с фоном и акцентом
-		cardBg := canvas.NewRectangle(theme.Current().Color(ColorNameCardBackground, theme.VariantDark))
-		cardBg.CornerRadius = 12
+		v := fyne.CurrentApp().Settings().ThemeVariant()
+		row.cardBg = canvas.NewRectangle(theme.Current().Color(ColorNameCardBackground, v))
+		row.cardBg.CornerRadius = 12
 
-		accentBar := canvas.NewRectangle(theme.Current().Color(theme.ColorNamePrimary, theme.VariantDark))
-		accentBar.SetMinSize(fyne.NewSize(4, 0))
+		row.accentBar = canvas.NewRectangle(theme.PrimaryColor())
+		row.accentBar.SetMinSize(fyne.NewSize(4, 0))
 
 		content := container.NewPadded(container.NewVBox(
 			topRow,
 			container.NewPadded(row.fieldsContainer),
 		))
 
-		cardContent := container.NewHBox(accentBar, content)
+		cardContent := container.NewHBox(row.accentBar, content)
 
 		row.container = container.NewStack(
-			cardBg,
+			row.cardBg,
 			cardContent,
 		)
 
@@ -1485,9 +1547,25 @@ func showProject(w fyne.Window, projectName string) {
 		}
 	})
 
+	themeBtn := widget.NewButtonWithIcon("", theme.ColorPaletteIcon(), func() {
+		current := fyne.CurrentApp().Settings().Theme()
+		if m, ok := current.(*modernTheme); ok && m.variant == theme.VariantDark {
+			fyne.CurrentApp().Settings().SetTheme(newModernLightTheme())
+		} else {
+			fyne.CurrentApp().Settings().SetTheme(newModernDarkTheme())
+		}
+
+		// Обновляем все существующие строки оборудования
+		for _, r := range rows {
+			r.refreshTheme()
+		}
+		w.Content().Refresh()
+	})
+
 	toolbar := container.NewHBox(
 		backBtn,
 		layout.NewSpacer(),
+		themeBtn,
 		helpBtn,
 		templateBtn,
 		importBtn,
@@ -1517,7 +1595,7 @@ func main() {
 	fmt.Println("Запуск десктопного приложения...")
 
 	myApp := app.New()
-	myApp.Settings().SetTheme(newModernTheme())
+	myApp.Settings().SetTheme(newModernDarkTheme())
 	myWindow := myApp.NewWindow("ConstructMaterialAI: Учёт оборудования")
 	myWindow.Resize(fyne.NewSize(1000, 750))
 
