@@ -45,19 +45,19 @@ class PumpFeatureEngineer:
         # геометрический фактор (косвенная оценка диаметра рабочего колеса)
         df_merge[c_diameter] = np.sqrt(s_head) / (s_speed + 1e-6)
 
-        # проверяем безопасность логарифмирования полезной мощности
-        invalid_power = df_merge[c_useful] < 0
-        if invalid_power.sum() > 0:
-            logger.warning(f"Найдено {invalid_power.sum()} строк с отрицательной мощностью. удаляем.")
-            df_merge = df_merge[~invalid_power]
+        # # проверяем безопасность логарифмирования полезной мощности
+        # invalid_power = df_merge[c_useful] < 0
+        # if invalid_power.sum() > 0:
+        #     logger.warning(f"Найдено {invalid_power.sum()} строк с отрицательной мощностью. удаляем.")
+        #     df_merge = df_merge[~invalid_power]
+        #
+        # cols_to_exclude = [c_weight_log, c_diameter]
 
-        cols_to_exclude = [c_weight_log, c_diameter]
-
-        # логарифмирование новых признаков
-        new_physics_cols = [col for col in self.config['feat_eng'] if col not in cols_to_exclude]
-        for col in new_physics_cols:
-            df_merge[f'{col}_log'] = np.log1p(df_merge[col].replace([np.inf, -np.inf], np.nan).fillna(0))
-            df_merge = df_merge.drop(columns=[col])
+        # # логарифмирование новых признаков
+        # new_physics_cols = [col for col in self.config['feat_eng'] if col not in cols_to_exclude]
+        # for col in new_physics_cols:
+        #     df_merge[f'{col}_log'] = np.log1p(df_merge[col].replace([np.inf, -np.inf], np.nan).fillna(0))
+        #     df_merge = df_merge.drop(columns=[col])
 
         # безопасная обработка целевой переменной
         if c_weight in df_merge.columns:
@@ -67,16 +67,14 @@ class PumpFeatureEngineer:
                 if invalid_weight.sum() > 0:
                     logger.warning(f"Удаляем {invalid_weight.sum()} строк без целевой переменной (веса).")
                     df_merge = df_merge[~invalid_weight]
-                df_merge[c_weight_log] = np.log(df_merge[c_weight])
             else:
                 # режим инференса
                 invalid_input = df_merge[c_weight] <= 0
                 if invalid_input.sum() > 0:
                     df_merge.loc[invalid_input, c_weight] = np.nan
-                df_merge[c_weight_log] = np.log(df_merge[c_weight].astype(float))
 
             # удаляем исходные колонки и ставим weight_log в конец
-            df_merge = df_merge.drop(columns=[c_weight, c_eff], errors='ignore')
+            df_merge = df_merge.drop(columns=[c_eff], errors='ignore')
             cols = df_merge.columns.tolist()
             if c_weight_log in cols:
                 cols.remove(c_weight_log)
@@ -84,6 +82,8 @@ class PumpFeatureEngineer:
                 df_merge = df_merge[cols]
         else:
             logger.info("Колонка веса отсутствует в датасете. пропускаем.")
+
+        df_merge['weight_kg'] = df_merge.pop('weight_kg')
 
         logger.info('Рассчет инженерных признаков завершен.')
         return df_merge

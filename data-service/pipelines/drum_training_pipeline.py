@@ -1,4 +1,4 @@
-# pipelines/conveyor_inference_pipeline.py
+# pipelines/drum_inference_pipeline.py
 import pandas as pd
 import logging
 from pathlib import Path
@@ -9,7 +9,7 @@ sys.path.append(str(BASE_DIR))
 
 from configs.config_loader import config
 from pipelines.base_etl import BaseETLPipeline
-from domain.conveyor_features import ConveyorFeatureEngineer
+from domain.drum_features import DrumFeatureEngineer
 from utils.cleaners import vectorized_numeric_clean
 
 # настройка логгера
@@ -20,31 +20,21 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-class ConveyorInferencePipeline(BaseETLPipeline):
-    """Пайплайн для реальных данных по конвейерам"""
+class DrumInferencePipeline(BaseETLPipeline):
+    """Пайплайн для эталонных данных"""
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.feature_engineer = ConveyorFeatureEngineer(self.config)
+        self.feature_engineer = DrumFeatureEngineer(self.config)
 
     def transform(self, df_features: pd.DataFrame, df_weight: None) -> pd.DataFrame:
         raw = self.config['raw_names']
-        logger.info('Начало трансформации данных конвейера...')
+        logger.info("Начало трансформации данных...")
 
         # 1. считываем страницу с файла
         df_merge = df_features.copy()
 
-        # дропаем колонку parent area и identical items
-        df_merge = df_merge.drop(columns=[raw['parent_area']], errors='ignore')
-
         # 2. переименование
         df_merge = df_merge.rename(columns=self.get_rename_map())
-
-        # очистка от дубликатов
-        duplicated_cols = df_merge.columns[df_merge.columns.duplicated()].unique().tolist()
-        if duplicated_cols:
-            logger.warning(
-                f"ВНИМАНИЕ! Найдены дублирующиеся колонки: {duplicated_cols}. Берем только первые вхождения.")
-            df_merge = df_merge.loc[:, ~df_merge.columns.duplicated()]
 
         # 3. очистка чисел
         cols_to_convert = self.config.get('cols_to_convert', [])
@@ -55,24 +45,23 @@ class ConveyorInferencePipeline(BaseETLPipeline):
             else:
                 logger.debug(f"Пропуск очистки: {col} отсутствует.")
 
-        logger.info('Трансформация конвейеров завершена.\n')
-
         logger.info("ФАКТИЧЕСКИЕ КОЛОНКИ: %s", df_merge.columns.tolist())
 
-        #4. feat eng
-        df_merge = self.feature_engineer.add_conveyor_features(df_merge)
+        # 4. feat eng
+        df_merge = self.feature_engineer.add_drum_features(df_merge)
 
-        return df_merge
+        logger.info("Трансформация данных завершена.")
+        return df_merge.iloc[1:]
 
     def load(self, df: pd.DataFrame):
         """Сохраняем под своим именем"""
-        super().load(df, filename='conveyor_dataset_inference.csv')
+        super().load(df, filename='drum_dataset_ml.csv')
 
-if __name__ == '__main__':
-    conveyor_inference_config = config['equipment']['conveyor_inference']
-    pipeline = ConveyorInferencePipeline(
-        input_file_path=BASE_DIR / 'data' / 'Реальные HorizDrum и BeltConveyor.xlsx',
+if __name__ == "__main__":
+    drum_inference_config = config['equipment']['drum_ml']
+    pipeline = DrumInferencePipeline(
+        input_file_path=BASE_DIR / 'data' / 'Horizontal drum.xlsx',
         output_folder_path=BASE_DIR / 'datasets',
-        config=conveyor_inference_config
+        config=drum_inference_config
     )
     pipeline.run()

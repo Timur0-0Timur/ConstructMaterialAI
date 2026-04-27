@@ -12,67 +12,56 @@ from pipelines.base_etl import BaseETLPipeline
 from domain.vessel_features import VesselFeatureEngineer
 from utils.cleaners import vectorized_numeric_clean
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 class VesselInferencePipeline(BaseETLPipeline):
-    """Пайплайн для инференса сосудов (Vessels)"""
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.feature_engineer = VesselFeatureEngineer(self.config)
 
-    def transform(self, df_features: pd.DataFrame, df_weight: pd.DataFrame = None) -> pd.DataFrame:
+    def transform(self, df_features: pd.DataFrame, df_weight: pd.DataFrame) -> pd.DataFrame:
         raw = self.config['raw_names']
-        logger.info('Начало трансформации для сосудов (инференс)...')
+        logger.info('Трансформация данных сосудов...')
 
-        # Если есть веса, мержим
-        if df_weight is not None and not df_weight.empty:
-            df_merge = pd.merge(
-                df_features, df_weight,
-                left_on=raw['tag'], right_on=raw['weight_tag'], how='outer'
-            )
-            df_merge = df_merge.dropna(subset=[raw['tag']])
-            df_merge[raw['tag']] = df_merge[raw['tag']].fillna(df_merge[raw['weight_tag']])
-            df_merge = df_merge.drop(columns=[raw['weight_tag']] + self.config.get('weight_col_to_drop', []), errors='ignore')
-        else:
-            df_merge = df_features.copy()
+        # 1. Join и удаление лишнего тега
+        df_merge = pd.merge(
+            df_features, df_weight,
+            left_on=raw['tag'], right_on=raw['tag_weight'], how='inner'
+        ).drop(raw['tag_weight'], axis=1, errors='ignore')
+
+        # удаление столбцов
+        df_merge = df_merge.drop([raw['int_name'], raw['ident_num'], raw['sk_thick']], axis=1)
 
         # 2. переименование
         df_merge = df_merge.rename(columns=self.get_rename_map())
 
+        cols = self.config['col_names']
+
         # 3. очистка чисел
-        for col in self.config.get('cols_to_convert', []):
-            if col in df_merge.columns:
-                df_merge[col] = vectorized_numeric_clean(df_merge[col])
-                df_merge[col] = pd.to_numeric(df_merge[col], errors='coerce')
+        for col in self.config['cols_to_convert']:
+            df_merge[col] = vectorized_numeric_clean(df_merge[col])
+            df_merge[col] = pd.to_numeric(df_merge[col], errors='coerce')
 
-        # 4. фильтрация
-        # Для сосудов важен диаметр и высота (ss_distance)
-        critical_cols = [self.config['col_names']['diameter'], self.config['col_names']['ss_distance']]
-        df_merge = self.feature_engineer.filter_critical_data(df_merge, critical_cols)
+        # 4. валидация
+        critical = [cols['diameter'], cols['ss_dist']]
+        df_merge = self.feature_engineer.filter_critical_data(df_merge, critical)
 
-        # 5. обогащение (enriching) 
-        # (если потребуется, можно добавить VesselEnricher аналогично насосам)
+        logger.info("ФАКТИЧЕСКИЕ КОЛОНКИ: %s", df_merge.columns.tolist())
 
-        # 6. физика
-        df_merge = self.feature_engineer.add_physics_features(df_merge, is_inference=True)
+        # 5. физика
+        df_merge = self.feature_engineer.add_vessel_features(df_merge)
 
         return df_merge
 
-    def load(self, df: pd.DataFrame, filename: str = 'vessel_dataset_inference.csv') -> None:
-        """Переопределяем сохранение под другое имя файла"""
-        super().load(df, filename=filename)
+    def load(self, df: pd.DataFrame):
+        super().load(df, filename='vessel_dataset_inference.csv')
 
 if __name__ == '__main__':
-    vessel_inf_config = config['equipment']['vessel_inference']
+    vessel_ml_config = config['equipment']['vessel_inference']
     pipeline = VesselInferencePipeline(
-        input_file_path=BASE_DIR / 'data' / 'Vessel_Data.xlsx', # пример файла
+        input_file_path=BASE_DIR / 'data' / 'Real vertical vessels.xlsx',
         output_folder_path=BASE_DIR / 'datasets',
-        config=vessel_inf_config
+        config=vessel_ml_config
     )
     pipeline.run()

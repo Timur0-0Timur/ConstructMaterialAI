@@ -30,11 +30,8 @@ class ConveyorTrainingPipeline(BaseETLPipeline):
         raw = self.config['raw_names']
         logger.info('Начало трансформации данных конвейера...')
 
-        # 1. объединение (Join)
-        df_merge = pd.merge(
-            df_features, df_weight,
-            left_on=raw['tag'], right_on=raw['tag_weight'], how='inner'
-        ).drop(raw['tag_weight'], axis=1, errors='ignore')
+        # 1. читаем файл
+        df_merge = df_features.copy()
 
         # 2. переименование
         df_merge = df_merge.rename(columns=self.get_rename_map())
@@ -46,6 +43,8 @@ class ConveyorTrainingPipeline(BaseETLPipeline):
 
         # 4. удаление строк с пропусками
         df_merge = df_merge.dropna(subset=self.config['cols_to_convert']).reset_index(drop=True)
+
+        logger.info("ФАКТИЧЕСКИЕ КОЛОНКИ: %s", df_merge.columns.tolist())
 
         # 5. физика
         df_merge = self.feature_engineer.add_conveyor_features(df_merge)
