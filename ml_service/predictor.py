@@ -168,3 +168,50 @@ class ConveyorPredictor:
 
         logger.info(f"Предсказание (Conveyor): weight_log={weight_log:.4f}, weight_kg={weight_kg:.2f}")
         return float(weight_kg)
+
+# --- DRUM PREDICTOR ---
+
+DRUM_FEATURE_COLUMNS = [
+    "log_liq_volume",
+    "log_ves_diameter",
+    "log_ss_distance",
+    "log_gauge_pres",
+    "log_volume_proxy",
+    "log_surface_area",
+    "aspect_ratio",
+]
+
+DRUM_MODELS_DIR = Path(__file__).resolve().parent / "models" / "drum"
+
+class DrumPredictor:
+    """Предиктор веса горизонтальной емкости (Drum) с помощью TransformedTargetRegressor."""
+
+    def __init__(self, models_dir: Path = DRUM_MODELS_DIR):
+        model_path = models_dir / "drum_model_final.joblib"
+
+        if not model_path.exists():
+            alt_path = Path(__file__).resolve().parent / "drum_model_final.joblib"
+            if alt_path.exists():
+                model_path = alt_path
+            else:
+                raise FileNotFoundError(f"Файл модели не найден: {model_path}")
+
+        self.model = joblib.load(model_path)
+        logger.info("Модель горизонтальной емкости загружена успешно (drum_model_final).")
+
+    def predict(self, features_dict: dict) -> float:
+        # Собираем вектор параметров в нужном порядке
+        raw_features = []
+        for col in DRUM_FEATURE_COLUMNS:
+            value = features_dict.get(col)
+            if value is None:
+                raise ValueError(f"Отсутствует обязательный параметр для модели: '{col}'")
+            raw_features.append(float(value))
+
+        X = np.array([raw_features])
+
+        # Предсказание (TransformedTargetRegressor с log1p/expm1 — возвращает вес в кг напрямую)
+        weight_kg = self.model.predict(X)[0]
+
+        logger.info(f"Предсказание (Drum): weight_kg={weight_kg:.2f}")
+        return float(weight_kg)
