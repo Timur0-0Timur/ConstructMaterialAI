@@ -23,8 +23,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-// ─── Константы ───────────────────────────────────────────────
-
+// Константы
 const (
 	dataFile           = "projects.json"
 	pumpBackendURL     = "http://localhost:8080/pump/estimate"
@@ -42,28 +41,25 @@ var equipmentTypes = []string{
 	"Горизонтальная емкость",
 }
 
-// ─── Модели данных ───────────────────────────────────────────
-
-// Equipment — единица оборудования внутри проекта.
-// Характеристики зависят от типа, но хранятся в общей структуре.
+// Модели данных
 type Equipment struct {
 	Type     string `json:"type"`
 	Tag      string `json:"tag"`
 	Quantity int    `json:"quantity"`
 
-	// Характеристики насоса
+	// Насос
 	FlowRate    *float64 `json:"flow_rate,omitempty"`
 	FluidHead   *float64 `json:"fluid_head,omitempty"`
 	RPM         *float64 `json:"rpm,omitempty"`
 	SpecGravity *float64 `json:"spec_gravity,omitempty"`
 	PowerKW     *float64 `json:"power_kw,omitempty"`
 
-	// Характеристики конвейера
+	// Конвейер
 	ConveyorLength   *float64 `json:"conveyor_length,omitempty"`
 	BeltWidth        *float64 `json:"belt_width,omitempty"`
 	ConveyorFlowRate *float64 `json:"conveyor_flow_rate,omitempty"`
 
-	// Характеристики vessel/drum
+	// Vessel/Drum
 	VesselDiameter               *float64 `json:"vessel_diameter,omitempty"`
 	DesignTangentToTangentLength *float64 `json:"design_tangent_to_tangent_length,omitempty"`
 	VesselTangentToTangentHeight *float64 `json:"vessel_tangent_to_tangent_height,omitempty"`
@@ -72,11 +68,9 @@ type Equipment struct {
 	SkirtHeight                  *float64 `json:"skirt_height,omitempty"`
 	VesselLegHeight              *float64 `json:"vessel_leg_height,omitempty"`
 
-	// Рассчитанный вес за единицу
 	CalculatedWeight float64 `json:"calculated_weight"`
 }
 
-// Project — проект со списком оборудования
 type Project struct {
 	Name      string      `json:"name"`
 	Equipment []Equipment `json:"equipment"`
@@ -98,14 +92,11 @@ func (p Project) EquipmentCount() int {
 	return count
 }
 
-// AppData — корневая структура для JSON-файла
 type AppData struct {
 	Projects []Project `json:"projects"`
 }
 
-// ─── Бэкенд-запросы ─────────────────────────────────────────
-
-// PumpRequest — то, что ожидает Go-бэкенд
+// Запросы к бэкенду
 type PumpRequest struct {
 	Tag         string   `json:"tag"`
 	FlowRate    *float64 `json:"flow_rate,omitempty"`
@@ -140,7 +131,6 @@ type DrumRequest struct {
 	DesignTemperature            *float64 `json:"design_temperature,omitempty"`
 }
 
-// PumpResponse — ответ от бэкенда
 type PumpResponse struct {
 	ModelVersion string  `json:"model_version"`
 	Weight       float64 `json:"weight"`
@@ -330,21 +320,18 @@ func sendEquipmentToBackend(eq Equipment) (float64, error) {
 	}
 }
 
-// ─── Persistence (JSON) ──────────────────────────────────────
-
+// Сохранение/Загрузка
 func loadProjects() AppData {
 	data := AppData{Projects: []Project{}}
-
 	file, err := os.ReadFile(dataFile)
 	if err != nil {
 		return data
 	}
 
 	if err := json.Unmarshal(file, &data); err != nil {
-		fmt.Println("Ошибка чтения JSON:", err)
+		fmt.Println("Ошибка загрузки:", err)
 		return AppData{Projects: []Project{}}
 	}
-
 	return data
 }
 
@@ -356,11 +343,9 @@ func saveProjects(data AppData) error {
 	return os.WriteFile(dataFile, file, 0644)
 }
 
-// ─── Хелперы для парсинга ────────────────────────────────────
-
+// Хелперы
 func parseOptionalFloat(s string) (*float64, error) {
 	s = strings.TrimSpace(s)
-	// Заменяем запятую на точку для поддержки обоих форматов ввода
 	s = strings.ReplaceAll(s, ",", ".")
 	if s == "" {
 		return nil, nil
@@ -379,8 +364,7 @@ func floatPtrToStr(p *float64) string {
 	return fmt.Sprintf("%.2f", *p)
 }
 
-// ─── UI: Карточка проекта ───────────────────────────────────
-
+// Элементы UI
 type projectCard struct {
 	project   Project
 	container *fyne.Container
@@ -400,16 +384,11 @@ func (c *projectCard) refreshTheme() {
 	}
 }
 
-// ─── UI: строка оборудования ─────────────────────────────────
-
-// equipmentRow хранит ссылки на виджеты одной строки
 type equipmentRow struct {
-	// Общие
 	typeSelect *widget.Select
 	tagEntry   *widget.Entry
 	qtyEntry   *widget.Entry
 
-	// Насос
 	flowLabel        *canvas.Text
 	flowEntry        *widget.Entry
 	headLabel        *canvas.Text
@@ -421,15 +400,13 @@ type equipmentRow struct {
 	powerLabel       *canvas.Text
 	powerEntry       *widget.Entry
 
-	// Конвейер
-	conveyorLengthLabel *canvas.Text
-	conveyorLengthEntry *widget.Entry
-	beltWidthLabel      *canvas.Text
-	beltWidthEntry      *widget.Entry
+	conveyorLengthLabel   *canvas.Text
+	conveyorLengthEntry   *widget.Entry
+	beltWidthLabel        *canvas.Text
+	beltWidthEntry        *widget.Entry
 	conveyorFlowRateLabel *canvas.Text
 	conveyorFlowRateEntry *widget.Entry
 
-	// Vessel / Drum
 	vesselDiameterLabel               *canvas.Text
 	vesselDiameterEntry               *widget.Entry
 	designTangentToTangentLengthLabel *canvas.Text
@@ -445,16 +422,12 @@ type equipmentRow struct {
 	vesselLegHeightLabel              *canvas.Text
 	vesselLegHeightEntry              *widget.Entry
 
-	// Контейнер с полями характеристик
 	fieldsContainer *fyne.Container
+	resultLabel     *widget.Label
+	expandBtn       *widget.Button
+	deleteBtn       *widget.Button
+	container       *fyne.Container
 
-	// Результат
-	resultLabel *widget.Label
-	expandBtn   *widget.Button
-	deleteBtn   *widget.Button
-	container   *fyne.Container
-
-	// Фоны для обновления темы
 	cardBg    *canvas.Rectangle
 	accentBar *canvas.Rectangle
 	expandBg  *canvas.Rectangle
@@ -486,7 +459,6 @@ func (r *equipmentRow) refreshTheme() {
 		r.deleteBtn.Refresh()
 	}
 
-	// Обновляем все лейблы
 	labels := []*canvas.Text{
 		r.flowLabel, r.headLabel, r.rpmLabel, r.specGravityLabel, r.powerLabel,
 		r.conveyorLengthLabel, r.beltWidthLabel, r.conveyorFlowRateLabel,
@@ -502,8 +474,6 @@ func (r *equipmentRow) refreshTheme() {
 		}
 	}
 
-	// Стиль кнопок-подложек
-	// (Они используют InputBackgroundColor)
 	r.container.Refresh()
 }
 
@@ -519,7 +489,6 @@ func (r *equipmentRow) markFieldInvalid(e *widget.Entry, label *canvas.Text, has
 	setLabelError(label, hasError)
 }
 
-// collectEquipment собирает данные из виджетов строки
 func (r *equipmentRow) collectEquipment() (Equipment, error) {
 	r.clearValidation()
 
@@ -545,14 +514,14 @@ func (r *equipmentRow) collectEquipment() (Equipment, error) {
 		flow, err := parseOptionalFloat(r.flowEntry.Text)
 		if err != nil || flow == nil {
 			r.markFieldInvalid(r.flowEntry, r.flowLabel, true)
-			return eq, fmt.Errorf("Расход (Flow Rate) обязателен")
+			return eq, fmt.Errorf("Расход обязателен")
 		}
 		eq.FlowRate = flow
 
 		head, err := parseOptionalFloat(r.headEntry.Text)
 		if err != nil || head == nil {
 			r.markFieldInvalid(r.headEntry, r.headLabel, true)
-			return eq, fmt.Errorf("Напор (Fluid Head) обязателен")
+			return eq, fmt.Errorf("Напор обязателен")
 		}
 		eq.FluidHead = head
 
@@ -573,14 +542,14 @@ func (r *equipmentRow) collectEquipment() (Equipment, error) {
 		conveyorLength, err := parseOptionalFloat(r.conveyorLengthEntry.Text)
 		if err != nil || conveyorLength == nil {
 			r.markFieldInvalid(r.conveyorLengthEntry, r.conveyorLengthLabel, true)
-			return eq, fmt.Errorf("Длина конвейера (Conveyor Length) обязательна")
+			return eq, fmt.Errorf("Длина конвейера обязательна")
 		}
 		eq.ConveyorLength = conveyorLength
 
 		beltWidth, err := parseOptionalFloat(r.beltWidthEntry.Text)
 		if err != nil || beltWidth == nil {
 			r.markFieldInvalid(r.beltWidthEntry, r.beltWidthLabel, true)
-			return eq, fmt.Errorf("Ширина ленты (Belt Width) обязательна")
+			return eq, fmt.Errorf("Ширина ленты обязательна")
 		}
 		eq.BeltWidth = beltWidth
 
@@ -593,14 +562,14 @@ func (r *equipmentRow) collectEquipment() (Equipment, error) {
 		vesselDiameter, err := parseOptionalFloat(r.vesselDiameterEntry.Text)
 		if err != nil || vesselDiameter == nil {
 			r.markFieldInvalid(r.vesselDiameterEntry, r.vesselDiameterLabel, true)
-			return eq, fmt.Errorf("Диаметр аппарата (Vessel Diameter) обязателен")
+			return eq, fmt.Errorf("Диаметр обязателен")
 		}
 		eq.VesselDiameter = vesselDiameter
 
 		vesselHeight, err := parseOptionalFloat(r.vesselTangentToTangentHeightEntry.Text)
 		if err != nil || vesselHeight == nil {
 			r.markFieldInvalid(r.vesselTangentToTangentHeightEntry, r.vesselTangentToTangentHeightLabel, true)
-			return eq, fmt.Errorf("Высота tangent-to-tangent обязательна")
+			return eq, fmt.Errorf("Высота обязательна")
 		}
 		eq.VesselTangentToTangentHeight = vesselHeight
 
@@ -624,21 +593,21 @@ func (r *equipmentRow) collectEquipment() (Equipment, error) {
 		if eq.SkirtHeight != nil && eq.VesselLegHeight != nil {
 			r.markFieldInvalid(r.skirtHeightEntry, r.skirtHeightLabel, true)
 			r.markFieldInvalid(r.vesselLegHeightEntry, r.vesselLegHeightLabel, true)
-			return eq, fmt.Errorf("Нельзя указывать одновременно высоту юбки и высоту опор")
+			return eq, fmt.Errorf("Нельзя указывать одновременно высоту юбки и опор")
 		}
 
 	case "Горизонтальная емкость":
 		vesselDiameter, err := parseOptionalFloat(r.vesselDiameterEntry.Text)
 		if err != nil || vesselDiameter == nil {
 			r.markFieldInvalid(r.vesselDiameterEntry, r.vesselDiameterLabel, true)
-			return eq, fmt.Errorf("Диаметр аппарата (Vessel Diameter) обязателен")
+			return eq, fmt.Errorf("Диаметр обязателен")
 		}
 		eq.VesselDiameter = vesselDiameter
 
 		designLength, err := parseOptionalFloat(r.designTangentToTangentLengthEntry.Text)
 		if err != nil || designLength == nil {
 			r.markFieldInvalid(r.designTangentToTangentLengthEntry, r.designTangentToTangentLengthLabel, true)
-			return eq, fmt.Errorf("Длина tangent-to-tangent обязательна")
+			return eq, fmt.Errorf("Длина обязательна")
 		}
 		eq.DesignTangentToTangentLength = designLength
 
@@ -655,15 +624,13 @@ func (r *equipmentRow) collectEquipment() (Equipment, error) {
 	return eq, nil
 }
 
-// ─── UI: Экраны ──────────────────────────────────────────────
-
-// showStartScreen — начальный экран с кнопкой «Начать»
+// Экраны
 func showStartScreen(w fyne.Window) {
 	title := widget.NewLabel("ConstructMaterialAI")
 	title.Alignment = fyne.TextAlignCenter
 	title.TextStyle = fyne.TextStyle{Bold: true}
 
-	subtitle := widget.NewLabel("Система учёта веса оборудования")
+	subtitle := widget.NewLabel("Система управления весом оборудования")
 	subtitle.Alignment = fyne.TextAlignCenter
 
 	startBtn := widget.NewButtonWithIcon("Начать", theme.NavigateNextIcon(), func() {
@@ -671,12 +638,33 @@ func showStartScreen(w fyne.Window) {
 	})
 	startBtn.Importance = widget.HighImportance
 
+	var authWidget fyne.CanvasObject
+	if currentAuth.IsLoggedIn() {
+		userLabel := widget.NewLabel("👤 " + currentAuth.GetEmail())
+		userLabel.Alignment = fyne.TextAlignCenter
+		logoutBtn := widget.NewButton("Выйти", func() {
+			clearAuthState()
+			showStartScreen(w)
+		})
+		authWidget = container.NewVBox(userLabel, container.NewCenter(logoutBtn))
+	} else {
+		loginBtn := widget.NewButton("Войти / Регистрация", func() {
+			showLoginScreen(w)
+		})
+		loginHint := widget.NewLabel("Войдите для синхронизации проектов")
+		loginHint.Alignment = fyne.TextAlignCenter
+		loginHint.TextStyle = fyne.TextStyle{Italic: true}
+		authWidget = container.NewVBox(loginHint, container.NewCenter(loginBtn))
+	}
+
 	content := container.NewVBox(
 		layout.NewSpacer(),
-		container.NewCenter(title),
-		container.NewCenter(subtitle),
+		title,
+		subtitle,
 		widget.NewLabel(""),
 		container.NewCenter(startBtn),
+		widget.NewSeparator(),
+		authWidget,
 		layout.NewSpacer(),
 	)
 
@@ -684,7 +672,6 @@ func showStartScreen(w fyne.Window) {
 	w.Resize(fyne.NewSize(windowWidth, windowHeight))
 }
 
-// createProjectCard — создает визуальный блок проекта
 func createProjectCard(w fyne.Window, proj Project, onOpen func(), onDelete func()) *projectCard {
 	card := &projectCard{project: proj}
 
@@ -846,16 +833,32 @@ func showProjectList(w fyne.Window) {
 		w.Content().Refresh()
 	})
 
+	// Кнопки облака (отображаются только если пользователь авторизован)
+	var cloudButtons fyne.CanvasObject
+	if currentAuth.IsLoggedIn() {
+		cloudSaveInfo := widget.NewLabel("☁ " + currentAuth.GetEmail())
+		cloudSaveInfo.TextStyle = fyne.TextStyle{Italic: true}
+
+		cloudLoadBtn := widget.NewButtonWithIcon("Загрузить из облака", theme.DownloadIcon(), func() {
+			showCloudLoadDialog(w)
+		})
+		cloudButtons = container.NewHBox(cloudSaveInfo, layout.NewSpacer(), cloudLoadBtn)
+	}
+
 	scrollable := container.NewVScroll(projectList)
 	scrollable.SetMinSize(fyne.NewSize(600, 400))
 
-	header := container.NewVBox(
+	headerItems := []fyne.CanvasObject{
 		container.NewHBox(backBtn, layout.NewSpacer(), themeBtn),
 		title,
 		statsBar,
 		container.NewPadded(searchEntry),
-		widget.NewSeparator(),
-	)
+	}
+	if cloudButtons != nil {
+		headerItems = append(headerItems, container.NewPadded(cloudButtons))
+	}
+	headerItems = append(headerItems, widget.NewSeparator())
+	header := container.NewVBox(headerItems...)
 
 	content := container.NewBorder(
 		header,
@@ -1010,7 +1013,7 @@ func buildConveyorFields(row *equipmentRow) *fyne.Container {
 		val, err := parseOptionalFloat(s)
 		row.markFieldInvalid(row.beltWidthEntry, row.beltWidthLabel, err != nil || val == nil)
 	}
-	
+
 	conveyorFlowRateLabel, conveyorFlowRateObj := createLabel("Производительность (т/ч):", false)
 	row.conveyorFlowRateLabel = conveyorFlowRateLabel
 	row.conveyorFlowRateEntry = widget.NewEntry()
@@ -1816,6 +1819,32 @@ func showProject(w fyne.Window, projectName string) {
 		saveBtn,
 	)
 
+	// Кнопка «Сохранить в облако» — только для авторизованных пользователей
+	if currentAuth.IsLoggedIn() {
+		cloudSaveBtn := widget.NewButtonWithIcon("Сохранить в облако", theme.UploadIcon(), func() {
+			// Собираем текущий проект из строк UI
+			currentProject := Project{Name: projectName, Equipment: []Equipment{}}
+			for _, row := range rows {
+				eq, err := row.collectEquipment()
+				if err == nil {
+					currentProject.Equipment = append(currentProject.Equipment, eq)
+				}
+			}
+			token := currentAuth.GetToken()
+			go func() {
+				err := saveProjectToCloud(currentProject, token)
+				fyne.Do(func() {
+					if err != nil {
+						dialog.ShowError(fmt.Errorf("Ошибка облачного сохранения: %w", err), w)
+					} else {
+						dialog.ShowInformation("Облако", "Проект успешно сохранён в облако!", w)
+					}
+				})
+			}()
+		})
+		bottomButtons.Add(cloudSaveBtn)
+	}
+
 	content := container.NewBorder(
 		container.NewVBox(toolbarTop, toolbarActions, title, widget.NewSeparator()),
 		container.NewVBox(footer, bottomButtons),
@@ -1829,6 +1858,9 @@ func showProject(w fyne.Window, projectName string) {
 
 func main() {
 	fmt.Println("Запуск десктопного приложения...")
+
+	// Восстанавливаем токен авторизации из файла (если был выполнен вход ранее)
+	loadAuthState()
 
 	myApp := app.New()
 	myApp.Settings().SetTheme(newModernDarkTheme())

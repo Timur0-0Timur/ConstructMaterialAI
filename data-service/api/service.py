@@ -148,4 +148,4 @@ def get_drum_estimation(input_data: dict) -> dict:
         }
     except Exception as e:
         logger.error(f"Ошибка в сервисе оценки емкости: {e}")
-        raise ValueError(f"Ошибка обработки данных: {str(e)}")
+        raise ValueError(f"Ошибка обработки данных: {str(e)}")

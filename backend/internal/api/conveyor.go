@@ -21,7 +21,6 @@ type ConveyorRequest struct {
 }
 
 func ConveyorHandler(w http.ResponseWriter, r *http.Request) {
-	// хэндлер, позволяющий получить данные от пользователя(json) о конкретном конвейере и вернуть ему результат ml-рассчета
 	if r.Method != "POST" {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		w.Write([]byte("Invalid request: Wrong method"))

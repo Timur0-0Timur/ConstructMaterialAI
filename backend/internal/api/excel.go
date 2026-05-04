@@ -10,7 +10,6 @@ import (
 )
 
 func ExcelHandler(w http.ResponseWriter, r *http.Request) {
-	// проверка end to end, позволяет закидывать датасет в формате эксель
 	if r.Method != "POST" {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		w.Write([]byte("Invalid request: Wrong method"))
