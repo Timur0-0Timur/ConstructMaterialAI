@@ -344,8 +344,7 @@ func showLoginScreen(w fyne.Window) {
 		}()
 	}
 
-	loginBtn := widget.NewButton("Войти", func() { doAuth(false) })
-	loginBtn.Importance = widget.HighImportance
+	loginBtn := NewThemedHoverButton("Войти", nil, func() { doAuth(false) })
 
 	registerBtn := widget.NewButton("Зарегистрироваться", func() { doAuth(true) })
 

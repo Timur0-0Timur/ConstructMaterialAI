@@ -21,6 +21,7 @@ import (
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"fyne.io/fyne/v2/driver/desktop"
 )
 
 // Константы
@@ -624,51 +625,127 @@ func (r *equipmentRow) collectEquipment() (Equipment, error) {
 	return eq, nil
 }
 
-// Экраны
+// HoverButton — кнопка с поддержкой событий наведения
+type HoverButton struct {
+	widget.Button
+	OnHover func(bool)
+}
+
+func (b *HoverButton) MouseIn(*desktop.MouseEvent) {
+	if b.OnHover != nil {
+		b.OnHover(true)
+	}
+}
+
+func (b *HoverButton) MouseOut() {
+	if b.OnHover != nil {
+		b.OnHover(false)
+	}
+}
+
+func NewHoverButton(label string, icon fyne.Resource, tapped func(), hover func(bool)) *HoverButton {
+	b := &HoverButton{OnHover: hover}
+	b.Text = label
+	b.Icon = icon
+	b.OnTapped = tapped
+	b.ExtendBaseWidget(b)
+	return b
+}
+
+// NewThemedHoverButton создает кнопку с подложкой и эффектом темно-синего наведения
+func NewThemedHoverButton(label string, icon fyne.Resource, tapped func()) fyne.CanvasObject {
+	bg := canvas.NewRectangle(theme.PrimaryColor())
+	bg.CornerRadius = 10
+
+	btn := NewHoverButton(label, icon, tapped, nil)
+	btn.Importance = widget.LowImportance
+
+	btn.OnHover = func(hover bool) {
+		if hover {
+			bg.FillColor = color.NRGBA{R: 2, G: 132, B: 199, A: 255}
+		} else {
+			bg.FillColor = theme.PrimaryColor()
+		}
+		bg.Refresh()
+	}
+	return container.NewStack(bg, btn)
+}
+
 func showStartScreen(w fyne.Window) {
-	title := widget.NewLabel("ConstructMaterialAI")
-	title.Alignment = fyne.TextAlignCenter
+	// Основной заголовок
+	title := canvas.NewText("ConstructMaterialAI", theme.PrimaryColor())
+	title.TextSize = 52
 	title.TextStyle = fyne.TextStyle{Bold: true}
+	title.Alignment = fyne.TextAlignCenter
 
-	subtitle := widget.NewLabel("Система управления весом оборудования")
+	subtitle := widget.NewLabel("Интеллектуальная система оценки веса промышленного оборудования")
 	subtitle.Alignment = fyne.TextAlignCenter
+	subtitle.TextStyle = fyne.TextStyle{Italic: true}
 
-	startBtn := widget.NewButtonWithIcon("Начать", theme.NavigateNextIcon(), func() {
+	// Кнопка начала
+	startBtn := NewThemedHoverButton("Открыть менеджер проектов", theme.FolderOpenIcon(), func() {
 		showProjectList(w)
 	})
-	startBtn.Importance = widget.HighImportance
 
+	// Блок авторизации
 	var authWidget fyne.CanvasObject
 	if currentAuth.IsLoggedIn() {
-		userLabel := widget.NewLabel("👤 " + currentAuth.GetEmail())
+		userLabel := widget.NewLabel(currentAuth.GetEmail())
 		userLabel.Alignment = fyne.TextAlignCenter
-		logoutBtn := widget.NewButton("Выйти", func() {
+		userLabel.TextStyle = fyne.TextStyle{Bold: true}
+
+		logoutBtn := widget.NewButtonWithIcon("Выйти", theme.CancelIcon(), func() {
 			clearAuthState()
 			showStartScreen(w)
 		})
-		authWidget = container.NewVBox(userLabel, container.NewCenter(logoutBtn))
+		logoutBtn.Importance = widget.LowImportance
+
+		authWidget = container.NewVBox(
+			container.NewCenter(container.NewHBox(widget.NewIcon(theme.AccountIcon()), userLabel)),
+			container.NewCenter(logoutBtn),
+		)
 	} else {
-		loginBtn := widget.NewButton("Войти / Регистрация", func() {
+		loginBtn := NewThemedHoverButton("Войти в облако", theme.AccountIcon(), func() {
 			showLoginScreen(w)
 		})
-		loginHint := widget.NewLabel("Войдите для синхронизации проектов")
-		loginHint.Alignment = fyne.TextAlignCenter
-		loginHint.TextStyle = fyne.TextStyle{Italic: true}
-		authWidget = container.NewVBox(loginHint, container.NewCenter(loginBtn))
+		authWidget = container.NewVBox(
+			widget.NewLabelWithStyle("Синхронизация отключена", fyne.TextAlignCenter, fyne.TextStyle{Italic: true}),
+			container.NewCenter(container.NewGridWrap(fyne.NewSize(200, 40), loginBtn)),
+		)
 	}
 
+	// Карточка действий
+	v := fyne.CurrentApp().Settings().ThemeVariant()
+	cardBg := canvas.NewRectangle(theme.Current().Color(ColorNameCardBackground, v))
+	cardBg.CornerRadius = 24
+	cardBg.StrokeColor = theme.PrimaryColor()
+	cardBg.StrokeWidth = 0.5
+
+	mainActions := container.NewStack(
+		cardBg,
+		container.NewPadded(container.NewVBox(
+			layout.NewSpacer(),
+			container.NewCenter(container.NewGridWrap(fyne.NewSize(340, 56), startBtn)),
+			authWidget,
+			layout.NewSpacer(),
+		)),
+	)
+
+	// Сборка контента
 	content := container.NewVBox(
 		layout.NewSpacer(),
-		title,
+		container.NewCenter(title),
 		subtitle,
 		widget.NewLabel(""),
-		container.NewCenter(startBtn),
-		widget.NewSeparator(),
-		authWidget,
+		container.NewCenter(container.NewGridWrap(fyne.NewSize(460, 260), mainActions)),
+		layout.NewSpacer(),
 		layout.NewSpacer(),
 	)
 
-	w.SetContent(container.NewPadded(content))
+	w.SetContent(container.NewStack(
+		canvas.NewRectangle(theme.BackgroundColor()),
+		content,
+	))
 	w.Resize(fyne.NewSize(windowWidth, windowHeight))
 }
 
@@ -1505,21 +1582,29 @@ func showProject(w fyne.Window, projectName string) {
 		byTypeLabel,
 	)
 
-	collapseAllBtn := widget.NewButtonWithIcon("Свернуть всё", theme.MenuDropDownIcon(), func() {
-		for _, r := range rows {
-			r.fieldsContainer.Hide()
-			r.expandBtn.SetIcon(theme.MenuDropDownIcon())
-			r.container.Refresh()
+	isAllExpanded := true
+	toggleAllBtn := widget.NewButtonWithIcon("Свернуть всё", theme.MenuDropUpIcon(), nil)
+	toggleAllBtn.OnTapped = func() {
+		if isAllExpanded {
+			for _, r := range rows {
+				r.fieldsContainer.Hide()
+				r.expandBtn.SetIcon(theme.MenuDropDownIcon())
+				r.container.Refresh()
+			}
+			toggleAllBtn.SetText("Развернуть всё")
+			toggleAllBtn.SetIcon(theme.MenuDropDownIcon())
+			isAllExpanded = false
+		} else {
+			for _, r := range rows {
+				r.fieldsContainer.Show()
+				r.expandBtn.SetIcon(theme.MenuDropUpIcon())
+				r.container.Refresh()
+			}
+			toggleAllBtn.SetText("Свернуть всё")
+			toggleAllBtn.SetIcon(theme.MenuDropUpIcon())
+			isAllExpanded = true
 		}
-	})
-
-	expandAllBtn := widget.NewButtonWithIcon("Развернуть всё", theme.MenuDropUpIcon(), func() {
-		for _, r := range rows {
-			r.fieldsContainer.Show()
-			r.expandBtn.SetIcon(theme.MenuDropUpIcon())
-			r.container.Refresh()
-		}
-	})
+	}
 
 	// Кнопка Help (инструкция)
 	helpBtn := widget.NewButtonWithIcon("", theme.QuestionIcon(), func() {
@@ -1808,8 +1893,7 @@ func showProject(w fyne.Window, projectName string) {
 		importBtn,
 		exportBtn,
 		widget.NewSeparator(),
-		collapseAllBtn,
-		expandAllBtn,
+		toggleAllBtn,
 		layout.NewSpacer(),
 		addBtn,
 	)
