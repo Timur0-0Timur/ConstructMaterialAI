@@ -8,13 +8,14 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
-// ─── Константы Excel ─────────────────────────────────────────
+// Константы Excel
 
 const (
 	sheetPumps      = "Насосы"
 	sheetConveyor   = "Конвейер"
 	sheetVessels    = "Вертикальные аппараты"
 	sheetDrums      = "Горизонтальные емкости"
+	sheetTitlePage  = "Титульный лист"
 	defaultSheetFix = "Sheet1" // excelize создаёт Sheet1 по умолчанию
 )
 
@@ -96,6 +97,54 @@ func (e ImportError) String() string {
 	return fmt.Sprintf("Лист «%s», строка %d: в колонке «%s» %s", e.Sheet, e.Row, e.Column, e.Msg)
 }
 
+func createTitlePage(f *excelize.File) error {
+	if err := f.SetSheetName(defaultSheetFix, sheetTitlePage); err != nil {
+		return fmt.Errorf("ошибка переименования листа: %w", err)
+	}
+
+	titleStyle, err := f.NewStyle(&excelize.Style{
+		Font: &excelize.Font{
+			Bold: true,
+			Size: 16,
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	linkStyle, err := f.NewStyle(&excelize.Style{
+		Font: &excelize.Font{
+			Color:     "#0000FF",
+			Underline: "single",
+			Size:      14,
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	_ = f.SetCellValue(sheetTitlePage, "A1", "Опись оборудования проекта")
+	_ = f.SetCellStyle(sheetTitlePage, "A1", "A1", titleStyle)
+
+	_ = f.SetColWidth(sheetTitlePage, "A", "A", 40)
+
+	startRow := 3
+	for i, sheet := range sheetOrder {
+		cell := fmt.Sprintf("A%d", startRow+i)
+		displayName := sheet
+		if sheet == sheetConveyor {
+			displayName = "Конвейеры"
+		}
+		_ = f.SetCellValue(sheetTitlePage, cell, displayName)
+
+		link := fmt.Sprintf("'%s'!A1", sheet)
+		_ = f.SetCellHyperLink(sheetTitlePage, cell, link, "Location")
+		_ = f.SetCellStyle(sheetTitlePage, cell, cell, linkStyle)
+	}
+
+	return nil
+}
+
 // generateTemplate создаёт пустой XLSX-файл с заголовками.
 func generateTemplate(filePath string) error {
 	f := excelize.NewFile()
@@ -124,16 +173,13 @@ func generateTemplate(filePath string) error {
 		return fmt.Errorf("ошибка создания стиля: %w", err)
 	}
 
-	for i, sheet := range sheetOrder {
-		if i == 0 {
-			// Переименовываем первый лист (Sheet1)
-			if err := f.SetSheetName(defaultSheetFix, sheet); err != nil {
-				return fmt.Errorf("ошибка переименования листа: %w", err)
-			}
-		} else {
-			if _, err := f.NewSheet(sheet); err != nil {
-				return fmt.Errorf("ошибка создания листа «%s»: %w", sheet, err)
-			}
+	if err := createTitlePage(f); err != nil {
+		return err
+	}
+
+	for _, sheet := range sheetOrder {
+		if _, err := f.NewSheet(sheet); err != nil {
+			return fmt.Errorf("ошибка создания листа «%s»: %w", sheet, err)
 		}
 
 		cols := columnsForSheet(sheet)
@@ -149,7 +195,6 @@ func generateTemplate(filePath string) error {
 			}
 		}
 
-		// Ширина колонок для читаемости
 		for j := range cols {
 			colName, _ := excelize.ColumnNumberToName(j + 1)
 			_ = f.SetColWidth(sheet, colName, colName, 18)
@@ -164,7 +209,6 @@ func exportProject(filePath string, equipment []Equipment) error {
 	f := excelize.NewFile()
 	defer f.Close()
 
-	// Стиль для заголовков — жирный
 	headerStyle, err := f.NewStyle(&excelize.Style{
 		Font: &excelize.Font{
 			Bold: true,
@@ -175,16 +219,14 @@ func exportProject(filePath string, equipment []Equipment) error {
 		return fmt.Errorf("ошибка создания стиля: %w", err)
 	}
 
+	if err := createTitlePage(f); err != nil {
+		return err
+	}
+
 	// Создаём листы и пишем заголовки
-	for i, sheet := range sheetOrder {
-		if i == 0 {
-			if err := f.SetSheetName(defaultSheetFix, sheet); err != nil {
-				return fmt.Errorf("ошибка переименования листа: %w", err)
-			}
-		} else {
-			if _, err := f.NewSheet(sheet); err != nil {
-				return fmt.Errorf("ошибка создания листа «%s»: %w", sheet, err)
-			}
+	for _, sheet := range sheetOrder {
+		if _, err := f.NewSheet(sheet); err != nil {
+			return fmt.Errorf("ошибка создания листа «%s»: %w", sheet, err)
 		}
 
 		cols := columnsForSheet(sheet)

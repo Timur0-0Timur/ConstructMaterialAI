@@ -33,3 +33,10 @@ go.work.sum
 
 # проекты в десктоп приложении
 projects.json
+
+# состояние авторизации (токены)
+desktop/auth_state.json
+
+# Инструкция по расширению
+EQUIPMENT_EXPANSION_GUIDE.md
+

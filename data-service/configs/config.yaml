@@ -259,3 +259,35 @@ equipment:
       volume_proxy: "volume_proxy"
       pressure_factor: "pressure_factor"
       weight_log: "weight_log"
+
+  drum_ml:
+    db_params:
+      table_prefix: "drum_data"
+    sheets:
+      features: "features"
+      weight: "weight"
+    raw_names:
+      tag: "User Tag number"
+      diameter: "Vessel diameter"
+      ss_dist: "Design tangent to tangent length"
+      pressure: "Design gauge pressure KPAG"
+      temp: "Design temperature"
+      weight_kg: "Weight"
+      tag_weight: "Tag"
+    col_names:
+      tag: "tag"
+      diameter: "ves_diameter"
+      ss_dist: "ss_distance"
+      pressure: "gauge_pres"
+      temp: "temp"
+      weight_kg: "weight_kg"
+    cols_to_convert:
+      - "ves_diameter"
+      - "ss_distance"
+      - "gauge_pres"
+      - "temp"
+      - "weight_kg"
+    feat_eng:
+      volume_proxy: "volume_proxy"
+      surface_area: "surface_area"
+      weight_log: "weight_log"
