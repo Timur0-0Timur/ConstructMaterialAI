@@ -21,6 +21,7 @@ type DrumRequest struct {
 }
 
 func DrumHandler(w http.ResponseWriter, r *http.Request) {
+	// хэндлер, позволяющий получить данные от пользователя(json) о конкретном drum и вернуть ему результат ml-рассчета weight
 	if r.Method != "POST" {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		w.Write([]byte("Invalid request: Wrong method"))

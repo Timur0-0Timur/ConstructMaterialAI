@@ -21,6 +21,7 @@ type PumpRequest struct {
 }
 
 func PumpHandler(w http.ResponseWriter, r *http.Request) {
+	// хэндлер, позволяющий получить данные от пользователя(json) о конкретном насосе и вернуть ему результат ml-рассчета
 	if r.Method != "POST" {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		w.Write([]byte("Invalid request: Wrong method"))

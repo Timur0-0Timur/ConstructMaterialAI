@@ -5,15 +5,17 @@ import (
 	"image/color"
 	"strconv"
 	"strings"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
-	"fyne.io/fyne/v2/driver/desktop"
 )
 
+// Элементы UI
 type projectCard struct {
 	project   Project
 	container *fyne.Container
@@ -272,6 +274,7 @@ func (r *equipmentRow) collectEquipment() (Equipment, error) {
 
 	return eq, nil
 }
+
 // HoverButton — кнопка с поддержкой событий наведения
 type HoverButton struct {
 	widget.Button

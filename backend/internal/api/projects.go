@@ -108,6 +108,7 @@ func ProjectByIDHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // createProjectHandler — POST /api/projects
+// Сохраняет новый проект со всем оборудованием.
 func createProjectHandler(w http.ResponseWriter, r *http.Request) {
 	userID, ok := auth.GetUserID(r)
 	if !ok {
@@ -158,6 +159,7 @@ func createProjectHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // listProjectsHandler — GET /api/projects
+// Возвращает список проектов авторизованного пользователя.
 func listProjectsHandler(w http.ResponseWriter, r *http.Request) {
 	userID, ok := auth.GetUserID(r)
 	if !ok {

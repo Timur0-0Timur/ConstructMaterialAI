@@ -2,13 +2,15 @@ package main
 
 import (
 	"fmt"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 )
 
+// Константы
 const (
-	windowWidth        = 1100
-	windowHeight       = 750
+	windowWidth  = 1100
+	windowHeight = 750
 )
 
 var equipmentTypes = []string{
@@ -17,6 +19,7 @@ var equipmentTypes = []string{
 	"Вертикальный аппарат",
 	"Горизонтальная емкость",
 }
+
 func main() {
 	fmt.Println("Запуск десктопного приложения...")
 
@@ -35,4 +38,3 @@ func main() {
 
 	fmt.Println("Приложение закрыто.")
 }
-

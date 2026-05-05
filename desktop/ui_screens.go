@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
@@ -16,6 +17,7 @@ import (
 )
 
 func showStartScreen(w fyne.Window) {
+	// Основной заголовок
 	title := canvas.NewText("ConstructMaterialAI", theme.PrimaryColor())
 	title.TextSize = 52
 	title.TextStyle = fyne.TextStyle{Bold: true}
@@ -25,10 +27,12 @@ func showStartScreen(w fyne.Window) {
 	subtitle.Alignment = fyne.TextAlignCenter
 	subtitle.TextStyle = fyne.TextStyle{Italic: true}
 
+	// Кнопка начала
 	startBtn := NewThemedHoverButton("Открыть менеджер проектов", theme.FolderOpenIcon(), func() {
 		showProjectList(w)
 	})
 
+	// Блок авторизации
 	var authWidget fyne.CanvasObject
 	if currentAuth.IsLoggedIn() {
 		userLabel := widget.NewLabel(currentAuth.GetEmail())
@@ -55,6 +59,7 @@ func showStartScreen(w fyne.Window) {
 		)
 	}
 
+	// Карточка действий
 	v := fyne.CurrentApp().Settings().ThemeVariant()
 	cardBg := canvas.NewRectangle(theme.Current().Color(ColorNameCardBackground, v))
 	cardBg.CornerRadius = 24
@@ -71,6 +76,7 @@ func showStartScreen(w fyne.Window) {
 		)),
 	)
 
+	// Сборка контента
 	content := container.NewVBox(
 		layout.NewSpacer(),
 		container.NewCenter(title),
@@ -87,6 +93,7 @@ func showStartScreen(w fyne.Window) {
 	))
 	w.Resize(fyne.NewSize(windowWidth, windowHeight))
 }
+
 // showProjectList — экран выбора / создания проекта
 func showProjectList(w fyne.Window) {
 	appData := loadProjects()
@@ -95,6 +102,7 @@ func showProjectList(w fyne.Window) {
 	title.Alignment = fyne.TextAlignCenter
 	title.TextStyle = fyne.TextStyle{Bold: true}
 
+	// Панель статистики
 	totalProjectsLabel := widget.NewLabel("")
 
 	updateStats := func() {
@@ -245,6 +253,7 @@ func showProjectList(w fyne.Window) {
 	w.SetContent(container.NewPadded(content))
 	w.Resize(fyne.NewSize(windowWidth, windowHeight))
 }
+
 // showProject — главное окно проекта с динамическим списком оборудования
 func showProject(w fyne.Window, projectName string) {
 	appData := loadProjects()
@@ -634,6 +643,7 @@ func showProject(w fyne.Window, projectName string) {
 		}
 	}
 
+	// Кнопка Help (инструкция)
 	helpBtn := widget.NewButtonWithIcon("", theme.QuestionIcon(), func() {
 		instructionText := `Инструкция по работе с шаблоном Excel:
 
@@ -653,6 +663,7 @@ func showProject(w fyne.Window, projectName string) {
 		dialog.ShowInformation("Справка: Импорт/Экспорт", instructionText, w)
 	})
 
+	// Кнопка «Шаблон»
 	templateBtn := widget.NewButtonWithIcon("Шаблон", theme.DownloadIcon(), func() {
 		saveDialog := dialog.NewFileSave(func(writer fyne.URIWriteCloser, err error) {
 			if err != nil {
@@ -678,6 +689,7 @@ func showProject(w fyne.Window, projectName string) {
 		saveDialog.Show()
 	})
 
+	// Кнопка «Импорт»
 	importBtn := widget.NewButtonWithIcon("Импорт", theme.FolderOpenIcon(), func() {
 		openDialog := dialog.NewFileOpen(func(reader fyne.URIReadCloser, err error) {
 			if err != nil {
@@ -717,6 +729,7 @@ func showProject(w fyne.Window, projectName string) {
 		openDialog.Show()
 	})
 
+	// Кнопка «Экспорт»
 	exportBtn := widget.NewButtonWithIcon("Экспорт", theme.DocumentCreateIcon(), func() {
 		// Собираем оборудование из строк
 		var equipment []Equipment

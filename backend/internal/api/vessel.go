@@ -22,6 +22,7 @@ type VesselRequest struct {
 }
 
 func VesselHandler(w http.ResponseWriter, r *http.Request) {
+	// хэндлер, позволяющий получить данные от пользователя(json) о конкретном сосуде и вернуть ему результат ml-рассчета
 	if r.Method != "POST" {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		w.Write([]byte("Invalid request: Wrong method"))

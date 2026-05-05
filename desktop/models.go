@@ -17,7 +17,7 @@ type Equipment struct {
 	BeltWidth        *float64 `json:"belt_width,omitempty"`
 	ConveyorFlowRate *float64 `json:"conveyor_flow_rate,omitempty"`
 
-	// Емкостное оборудование (Vessel/Drum)
+	// Vessel/Drum
 	VesselDiameter               *float64 `json:"vessel_diameter,omitempty"`
 	DesignTangentToTangentLength *float64 `json:"design_tangent_to_tangent_length,omitempty"`
 	VesselTangentToTangentHeight *float64 `json:"vessel_tangent_to_tangent_height,omitempty"`
