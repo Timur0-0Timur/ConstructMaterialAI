@@ -1,6 +1,7 @@
 package db
 
 import (
+	"constructmaterialai/internal/models"
 	"fmt"
 	"os"
 
@@ -35,4 +36,15 @@ func Connect() error {
 	sqlDB.SetMaxIdleConns(5)
 
 	return nil
+}
+
+// Migrate выполняет автомиграцию всех таблиц
+func Migrate() error {
+	return DB.AutoMigrate(
+		&models.User{},
+		&models.Project{},
+		&models.EquipmentItem{},
+		&models.Team{},
+		&models.TeamMember{},
+	)
 }

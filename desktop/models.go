@@ -1,5 +1,7 @@
 package main
 
+import "time"
+
 type Equipment struct {
 	Type     string `json:"type"`
 	Tag      string `json:"tag"`
@@ -32,6 +34,11 @@ type Equipment struct {
 type Project struct {
 	Name      string      `json:"name"`
 	Equipment []Equipment `json:"equipment"`
+	// Поля для облачной синхронизации
+	CloudID   uint      `json:"cloud_id,omitempty"`
+	TeamID    *uint     `json:"team_id,omitempty"`
+	OwnerID   uint      `json:"owner_id,omitempty"`
+	UpdatedAt time.Time `json:"updated_at,omitempty"`
 }
 
 func (p Project) TotalWeight() float64 {
@@ -52,4 +59,28 @@ func (p Project) EquipmentCount() int {
 
 type AppData struct {
 	Projects []Project `json:"projects"`
+}
+
+// ─── Облачные DTO для Teams ──────────────────────────────────
+
+// CloudTeam — команда из облачного API
+type CloudTeam struct {
+	ID      uint   `json:"id"`
+	Name    string `json:"name"`
+	OwnerID uint   `json:"owner_id"`
+}
+
+// CloudTeamMember — участник команды из облачного API
+type CloudTeamMember struct {
+	UserID uint   `json:"user_id"`
+	Email  string `json:"email"`
+	Role   string `json:"role"`
+}
+
+// CloudProject — проект из облачного API (расширенный для команд)
+type CloudProject struct {
+	ID      uint   `json:"id"`
+	Name    string `json:"name"`
+	TeamID  *uint  `json:"team_id,omitempty"`
+	OwnerID uint   `json:"owner_id"`
 }

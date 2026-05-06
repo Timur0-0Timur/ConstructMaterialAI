@@ -26,6 +26,7 @@ const (
 	apiRegisterURL = backendBaseURL + "/api/auth/register"
 	apiLoginURL    = backendBaseURL + "/api/auth/login"
 	apiProjectsURL = backendBaseURL + "/api/projects"
+	apiTeamsURL    = backendBaseURL + "/api/teams"
 	authStateFile  = "auth_state.json"
 )
 
@@ -161,6 +162,7 @@ type cloudCreateProjectRequest struct {
 	Name           string               `json:"name"`
 	Description    string               `json:"description"`
 	EquipmentItems []cloudEquipmentItem `json:"equipment_items"`
+	UpdatedAt      time.Time            `json:"updated_at,omitempty"`
 }
 
 type cloudProjectListItem struct {
@@ -168,6 +170,8 @@ type cloudProjectListItem struct {
 	Name        string    `json:"name"`
 	Description string    `json:"description"`
 	ItemCount   int       `json:"item_count"`
+	TeamID      *uint     `json:"team_id,omitempty"`
+	OwnerID     uint      `json:"owner_id"`
 	CreatedAt   time.Time `json:"created_at"`
 }
 
@@ -176,10 +180,13 @@ type cloudProjectDetail struct {
 	Name           string               `json:"name"`
 	Description    string               `json:"description"`
 	EquipmentItems []cloudEquipmentItem `json:"equipment_items"`
+	TeamID         *uint                `json:"team_id,omitempty"`
+	OwnerID        uint                 `json:"owner_id"`
 	CreatedAt      time.Time            `json:"created_at"`
+	UpdatedAt      time.Time            `json:"updated_at"`
 }
 
-// saveProjectToCloud отправляет проект на бэкенд с JWT токеном.
+// saveProjectToCloud отправляет проект на бэкенд с JWT токеном (POST для новых, PUT для существующих).
 func saveProjectToCloud(proj Project, token string) error {
 	items := make([]cloudEquipmentItem, 0, len(proj.Equipment))
 	for _, eq := range proj.Equipment {
@@ -198,10 +205,18 @@ func saveProjectToCloud(proj Project, token string) error {
 	payload := cloudCreateProjectRequest{
 		Name:           proj.Name,
 		EquipmentItems: items,
+		UpdatedAt:      proj.UpdatedAt, // для проверки конфликта версий
 	}
 	body, _ := json.Marshal(payload)
 
-	req, err := http.NewRequest(http.MethodPost, apiProjectsURL, bytes.NewReader(body))
+	method := http.MethodPost
+	url := apiProjectsURL
+	if proj.CloudID > 0 {
+		method = http.MethodPut
+		url = fmt.Sprintf("%s/%d", apiProjectsURL, proj.CloudID)
+	}
+
+	req, err := http.NewRequest(method, url, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("ошибка создания запроса: %w", err)
 	}
@@ -215,7 +230,11 @@ func saveProjectToCloud(proj Project, token string) error {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusCreated {
+	if resp.StatusCode == http.StatusConflict {
+		return fmt.Errorf("CONFLICT_VERSION") // Специальный маркер для UI
+	}
+
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 		raw, _ := io.ReadAll(resp.Body)
 		var errResp struct {
 			Error string `json:"error"`
@@ -278,7 +297,14 @@ func loadCloudProjectByID(projectID uint, token string) (*cloudProjectDetail, er
 
 // cloudProjectToLocal конвертирует облачный проект в локальный формат.
 func cloudProjectToLocal(detail *cloudProjectDetail) Project {
-	proj := Project{Name: detail.Name, Equipment: []Equipment{}}
+	proj := Project{
+		Name:      detail.Name,
+		CloudID:   detail.ID,
+		TeamID:    detail.TeamID,
+		OwnerID:   detail.OwnerID,
+		UpdatedAt: detail.UpdatedAt,
+		Equipment: []Equipment{},
+	}
 	for _, item := range detail.EquipmentItems {
 		var eq Equipment
 		if err := json.Unmarshal(item.Parameters, &eq); err == nil {
@@ -286,6 +312,152 @@ func cloudProjectToLocal(detail *cloudProjectDetail) Project {
 		}
 	}
 	return proj
+}
+
+// ─── Cloud API для команд ─────────────────────────────────────
+
+func createTeam(name, token string) (*CloudTeam, error) {
+	body, _ := json.Marshal(map[string]string{"name": name})
+	req, _ := http.NewRequest(http.MethodPost, apiTeamsURL, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("сервер недоступен: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		return nil, fmt.Errorf("ошибка создания команды (код %d)", resp.StatusCode)
+	}
+
+	var team CloudTeam
+	if err := json.NewDecoder(resp.Body).Decode(&team); err != nil {
+		return nil, fmt.Errorf("ошибка разбора: %w", err)
+	}
+	return &team, nil
+}
+
+func loadTeams(token string) ([]CloudTeam, error) {
+	req, _ := http.NewRequest(http.MethodGet, apiTeamsURL, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("сервер недоступен: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("ошибка загрузки команд (код %d)", resp.StatusCode)
+	}
+
+	var list []CloudTeam
+	if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
+		return nil, fmt.Errorf("ошибка разбора: %w", err)
+	}
+	return list, nil
+}
+
+func addTeamMember(teamID uint, email, token string) error {
+	url := fmt.Sprintf("%s/%d/members", apiTeamsURL, teamID)
+	body, _ := json.Marshal(map[string]string{"email": email})
+	req, _ := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("сервер недоступен: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		raw, _ := io.ReadAll(resp.Body)
+		var errResp struct{ Error string `json:"error"` }
+		_ = json.Unmarshal(raw, &errResp)
+		if errResp.Error != "" {
+			return fmt.Errorf("%s", errResp.Error)
+		}
+		return fmt.Errorf("ошибка добавления (код %d)", resp.StatusCode)
+	}
+	return nil
+}
+
+func loadTeamMembers(teamID uint, token string) ([]CloudTeamMember, error) {
+	url := fmt.Sprintf("%s/%d/members", apiTeamsURL, teamID)
+	req, _ := http.NewRequest(http.MethodGet, url, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("сервер недоступен: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("ошибка загрузки участников (код %d)", resp.StatusCode)
+	}
+
+	var list []CloudTeamMember
+	if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
+		return nil, fmt.Errorf("ошибка разбора: %w", err)
+	}
+	return list, nil
+}
+
+func loadTeamProjects(teamID uint, token string) ([]cloudProjectListItem, error) {
+	url := fmt.Sprintf("%s/%d/projects", apiTeamsURL, teamID)
+	req, _ := http.NewRequest(http.MethodGet, url, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("сервер недоступен: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("ошибка загрузки проектов (код %d)", resp.StatusCode)
+	}
+
+	var list []cloudProjectListItem
+	if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
+		return nil, fmt.Errorf("ошибка разбора: %w", err)
+	}
+	return list, nil
+}
+
+func moveProjectToTeam(projectID uint, teamID *uint, token string) error {
+	url := fmt.Sprintf("%s/%d/move", apiProjectsURL, projectID)
+	body, _ := json.Marshal(map[string]*uint{"team_id": teamID})
+	req, _ := http.NewRequest(http.MethodPatch, url, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("сервер недоступен: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		raw, _ := io.ReadAll(resp.Body)
+		var errResp struct{ Error string `json:"error"` }
+		_ = json.Unmarshal(raw, &errResp)
+		if errResp.Error != "" {
+			return fmt.Errorf("%s", errResp.Error)
+		}
+		return fmt.Errorf("ошибка переноса (код %d)", resp.StatusCode)
+	}
+	return nil
 }
 
 // ─── UI: Экран авторизации ────────────────────────────────────

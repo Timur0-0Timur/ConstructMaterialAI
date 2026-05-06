@@ -332,11 +332,21 @@ func createProjectCard(w fyne.Window, proj Project, onOpen func(), onDelete func
 	info := widget.NewLabel(fmt.Sprintf("Оборудование: %d | Вес: %.2f кг", eqCount, weight))
 	info.TextStyle = fyne.TextStyle{Italic: true}
 
+	var teamBadge *widget.Label
+	if proj.TeamID != nil && *proj.TeamID > 0 {
+		teamBadge = widget.NewLabelWithStyle("КОМАНДНЫЙ", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	}
+
 	openBtn := widget.NewButtonWithIcon("Открыть", theme.FolderOpenIcon(), onOpen)
 	openBtn.Importance = widget.HighImportance
 
 	deleteBtn := widget.NewButtonWithIcon("", theme.DeleteIcon(), onDelete)
 	deleteBtn.Importance = widget.LowImportance
+
+	// Блокировка удаления, если проект имеет владельца и текущий пользователь им не является
+	if proj.OwnerID > 0 && currentAuth.IsLoggedIn() && proj.OwnerID != currentAuth.UserID {
+		deleteBtn.Disable()
+	}
 
 	v := fyne.CurrentApp().Settings().ThemeVariant()
 	card.bg = canvas.NewRectangle(theme.Current().Color(ColorNameCardBackground, v))
@@ -345,12 +355,15 @@ func createProjectCard(w fyne.Window, proj Project, onOpen func(), onDelete func
 	card.accent = canvas.NewRectangle(theme.PrimaryColor())
 	card.accent.SetMinSize(fyne.NewSize(4, 0))
 
+	vbox := container.NewVBox(title)
+	if teamBadge != nil {
+		vbox.Add(teamBadge)
+	}
+	vbox.Add(info)
+
 	content := container.NewPadded(container.NewHBox(
 		card.accent,
-		container.NewVBox(
-			title,
-			info,
-		),
+		vbox,
 		layout.NewSpacer(),
 		container.NewHBox(openBtn, deleteBtn),
 	))

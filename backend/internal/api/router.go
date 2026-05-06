@@ -22,4 +22,8 @@ func RegisterRoutes(mux *http.ServeMux) {
 	// Проекты (защищенные)
 	mux.Handle("/api/projects", auth.AuthMiddleware(http.HandlerFunc(ProjectsHandler)))
 	mux.Handle("/api/projects/", auth.AuthMiddleware(http.HandlerFunc(ProjectByIDHandler)))
+
+	// Команды (защищенные)
+	mux.Handle("/api/teams", auth.AuthMiddleware(http.HandlerFunc(TeamsHandler)))
+	mux.Handle("/api/teams/", auth.AuthMiddleware(http.HandlerFunc(TeamsSubHandler)))
 }

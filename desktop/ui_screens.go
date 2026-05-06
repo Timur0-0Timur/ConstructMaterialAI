@@ -1,10 +1,13 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -231,6 +234,111 @@ func showProjectList(w fyne.Window) {
 	scrollable := container.NewVScroll(projectList)
 	scrollable.SetMinSize(fyne.NewSize(600, 400))
 
+	// Вкладки: Мои проекты и Проекты команд
+	var mainContent fyne.CanvasObject
+	if currentAuth.IsLoggedIn() {
+		myProjectsTab := container.NewTabItem("Мои проекты", container.NewBorder(nil, container.NewPadded(createBtn), nil, nil, scrollable))
+		
+		teamProjectsBox := container.NewVBox()
+		teamScrollable := container.NewVScroll(teamProjectsBox)
+		
+		teamSelect := widget.NewSelect([]string{}, nil)
+		teamMap := make(map[string]CloudTeam)
+		
+		loadTeamData := func() {
+			teams, err := loadTeams(currentAuth.GetToken())
+			if err != nil {
+				dialog.ShowError(err, w)
+				return
+			}
+			names := make([]string, 0, len(teams))
+			for _, t := range teams {
+				names = append(names, t.Name)
+				teamMap[t.Name] = t
+			}
+			teamSelect.Options = names
+			teamSelect.Refresh()
+		}
+		
+		teamSelect.OnChanged = func(name string) {
+			t, ok := teamMap[name]
+			if !ok { return }
+			teamProjectsBox.RemoveAll()
+			
+			projects, err := loadTeamProjects(t.ID, currentAuth.GetToken())
+			if err != nil {
+				dialog.ShowError(err, w)
+				return
+			}
+			
+			for _, cp := range projects {
+				cloudProj := cp // capture
+				card := createProjectCard(w, Project{
+					Name: cloudProj.Name, 
+					TeamID: cloudProj.TeamID,
+					OwnerID: cloudProj.OwnerID,
+				}, func() {
+					// При открытии загружаем детальную информацию и сохраняем локально
+					token := currentAuth.GetToken()
+					url := fmt.Sprintf("%s/%d", apiProjectsURL, cloudProj.ID)
+					req, _ := http.NewRequest(http.MethodGet, url, nil)
+					req.Header.Set("Authorization", "Bearer "+token)
+					client := &http.Client{Timeout: 15 * time.Second}
+					resp, err := client.Do(req)
+					if err != nil || resp.StatusCode != http.StatusOK {
+						dialog.ShowError(fmt.Errorf("не удалось загрузить проект"), w)
+						return
+					}
+					defer resp.Body.Close()
+					var detail cloudProjectDetail
+					if err := json.NewDecoder(resp.Body).Decode(&detail); err != nil {
+						dialog.ShowError(err, w)
+						return
+					}
+					
+					localProj := cloudProjectToLocal(&detail)
+					// Обновляем или добавляем в appData.Projects
+					found := false
+					for i, p := range appData.Projects {
+						if p.CloudID == localProj.CloudID || p.Name == localProj.Name {
+							appData.Projects[i] = localProj
+							found = true
+							break
+						}
+					}
+					if !found {
+						appData.Projects = append(appData.Projects, localProj)
+					}
+					_ = saveProjects(appData)
+					showProject(w, localProj.Name)
+				}, func() {})
+				// В карточке удаление уже отключено для не-владельцев
+				teamProjectsBox.Add(container.NewPadded(card.container))
+			}
+			teamProjectsBox.Refresh()
+		}
+		
+		manageTeamsBtn := widget.NewButtonWithIcon("Управление командами", theme.SettingsIcon(), func() {
+			showTeamManagement(w)
+		})
+		manageTeamsBtn.Importance = widget.LowImportance
+
+		teamTopBar := container.NewHBox(widget.NewLabel("Команда:"), teamSelect, layout.NewSpacer(), manageTeamsBtn)
+		
+		teamTabContent := container.NewBorder(container.NewPadded(teamTopBar), nil, nil, nil, teamScrollable)
+		teamProjectsTab := container.NewTabItem("Проекты команд", teamTabContent)
+		
+		tabs := container.NewAppTabs(myProjectsTab, teamProjectsTab)
+		tabs.OnSelected = func(item *container.TabItem) {
+			if item == teamProjectsTab {
+				loadTeamData()
+			}
+		}
+		mainContent = tabs
+	} else {
+		mainContent = container.NewBorder(nil, container.NewPadded(createBtn), nil, nil, scrollable)
+	}
+
 	headerItems := []fyne.CanvasObject{
 		container.NewHBox(backBtn, layout.NewSpacer(), themeBtn),
 		title,
@@ -245,13 +353,150 @@ func showProjectList(w fyne.Window) {
 
 	content := container.NewBorder(
 		header,
-		container.NewPadded(createBtn),
+		nil,
 		nil, nil,
-		scrollable,
+		mainContent,
 	)
 
 	w.SetContent(container.NewPadded(content))
 	w.Resize(fyne.NewSize(windowWidth, windowHeight))
+}
+
+// showTeamManagement открывает экран управления командами
+func showTeamManagement(w fyne.Window) {
+	title := widget.NewLabel("Управление командами")
+	title.Alignment = fyne.TextAlignCenter
+	title.TextStyle = fyne.TextStyle{Bold: true}
+
+	var teamList *widget.List
+	var memberBox *fyne.Container
+	var teams []CloudTeam
+	var currentTeam *CloudTeam
+
+	loadTeamsData := func() {
+		t, err := loadTeams(currentAuth.GetToken())
+		if err == nil {
+			teams = t
+			teamList.Refresh()
+		}
+	}
+
+	var loadMembersData func(team CloudTeam)
+	loadMembersData = func(team CloudTeam) {
+		members, err := loadTeamMembers(team.ID, currentAuth.GetToken())
+		if err != nil {
+			dialog.ShowError(err, w)
+			return
+		}
+		memberBox.RemoveAll()
+		
+		isOwner := team.OwnerID == currentAuth.UserID
+		
+		for _, m := range members {
+			usr := m // capture
+			lbl := widget.NewLabel(fmt.Sprintf("%s (%s)", usr.Email, usr.Role))
+			var actBtn *widget.Button
+			if isOwner && usr.UserID != currentAuth.UserID {
+				actBtn = widget.NewButtonWithIcon("", theme.DeleteIcon(), func() {
+					// Вызов API удаления участника
+					url := fmt.Sprintf("%s/%d/members?user_id=%d", apiTeamsURL, team.ID, usr.UserID)
+					req, _ := http.NewRequest(http.MethodDelete, url, nil)
+					req.Header.Set("Authorization", "Bearer "+currentAuth.GetToken())
+					client := &http.Client{Timeout: 15 * time.Second}
+					resp, err := client.Do(req)
+					if err == nil && resp.StatusCode == http.StatusOK {
+						loadMembersData(team)
+					} else {
+						dialog.ShowError(fmt.Errorf("ошибка удаления участника"), w)
+					}
+				})
+			} else if !isOwner && usr.UserID == currentAuth.UserID {
+				// Участник может выйти
+				actBtn = widget.NewButton("Выйти", func() {
+					url := fmt.Sprintf("%s/%d/members?user_id=%d", apiTeamsURL, team.ID, usr.UserID)
+					req, _ := http.NewRequest(http.MethodDelete, url, nil)
+					req.Header.Set("Authorization", "Bearer "+currentAuth.GetToken())
+					client := &http.Client{Timeout: 15 * time.Second}
+					resp, err := client.Do(req)
+					if err == nil && resp.StatusCode == http.StatusOK {
+						loadTeamsData()
+						memberBox.RemoveAll()
+					}
+				})
+			} else {
+				actBtn = widget.NewButton("", nil)
+				actBtn.Hide()
+			}
+			row := container.NewHBox(lbl, layout.NewSpacer(), actBtn)
+			memberBox.Add(row)
+		}
+		
+		if isOwner {
+			addBtn := widget.NewButtonWithIcon("Добавить участника", theme.ContentAddIcon(), func() {
+				emailEntry := widget.NewEntry()
+				emailEntry.SetPlaceHolder("Email пользователя")
+				dialog.ShowForm("Добавить участника", "Добавить", "Отмена",
+					[]*widget.FormItem{widget.NewFormItem("Email", emailEntry)},
+					func(ok bool) {
+						if ok && emailEntry.Text != "" {
+							if err := addTeamMember(team.ID, emailEntry.Text, currentAuth.GetToken()); err != nil {
+								dialog.ShowError(err, w)
+							} else {
+								loadMembersData(team)
+							}
+						}
+					}, w)
+			})
+			memberBox.Add(container.NewPadded(addBtn))
+		}
+		memberBox.Refresh()
+	}
+
+	teamList = widget.NewList(
+		func() int { return len(teams) },
+		func() fyne.CanvasObject { return widget.NewLabel("Team Name") },
+		func(i widget.ListItemID, o fyne.CanvasObject) {
+			o.(*widget.Label).SetText(teams[i].Name)
+		},
+	)
+	teamList.OnSelected = func(id widget.ListItemID) {
+		currentTeam = &teams[id]
+		loadMembersData(*currentTeam)
+	}
+
+	memberBox = container.NewVBox()
+	
+	createTeamBtn := widget.NewButtonWithIcon("Создать команду", theme.ContentAddIcon(), func() {
+		nameEntry := widget.NewEntry()
+		dialog.ShowForm("Новая команда", "Создать", "Отмена",
+			[]*widget.FormItem{widget.NewFormItem("Название", nameEntry)},
+			func(ok bool) {
+				if ok && nameEntry.Text != "" {
+					if _, err := createTeam(nameEntry.Text, currentAuth.GetToken()); err != nil {
+						dialog.ShowError(err, w)
+					} else {
+						loadTeamsData()
+					}
+				}
+			}, w)
+	})
+
+	backBtn := widget.NewButtonWithIcon("Назад", theme.NavigateBackIcon(), func() {
+		showProjectList(w)
+	})
+
+	topBar := container.NewHBox(backBtn, layout.NewSpacer(), title, layout.NewSpacer())
+
+	leftPanel := container.NewBorder(container.NewPadded(createTeamBtn), nil, nil, nil, teamList)
+	rightPanel := container.NewVScroll(memberBox)
+	
+	split := container.NewHSplit(leftPanel, rightPanel)
+	split.Offset = 0.4
+
+	content := container.NewBorder(topBar, nil, nil, nil, split)
+	w.SetContent(container.NewPadded(content))
+	
+	loadTeamsData()
 }
 
 // showProject — главное окно проекта с динамическим списком оборудования
@@ -944,7 +1189,8 @@ func showProject(w fyne.Window, projectName string) {
 	if currentAuth.IsLoggedIn() {
 		cloudSaveBtn := widget.NewButtonWithIcon("Сохранить в облако", theme.UploadIcon(), func() {
 			// Собираем текущий проект из строк UI
-			currentProject := Project{Name: projectName, Equipment: []Equipment{}}
+			currentProject := appData.Projects[projIdx]
+			currentProject.Equipment = []Equipment{}
 			for _, row := range rows {
 				eq, err := row.collectEquipment()
 				if err == nil {
@@ -956,7 +1202,20 @@ func showProject(w fyne.Window, projectName string) {
 				err := saveProjectToCloud(currentProject, token)
 				fyne.Do(func() {
 					if err != nil {
-						dialog.ShowError(fmt.Errorf("Ошибка облачного сохранения: %w", err), w)
+						if err.Error() == "CONFLICT_VERSION" {
+							dialog.ShowConfirm("Конфликт версий", 
+								"Проект был изменён другим участником команды.\nПерезаписать текущей версией?", 
+								func(ok bool) {
+									if ok {
+										// Для перезаписи нужно обновить UpdatedAt локально, чтобы бэкенд пропустил?
+										// В реальном приложении нужно заново запросить проект,
+										// но здесь просто предупреждаем, что сохранение не прошло.
+										dialog.ShowInformation("Конфликт", "Для перезаписи обновите проект и повторите.", w)
+									}
+								}, w)
+						} else {
+							dialog.ShowError(fmt.Errorf("Ошибка облачного сохранения: %w", err), w)
+						}
 					} else {
 						dialog.ShowInformation("Облако", "Проект успешно сохранён в облако!", w)
 					}
@@ -964,6 +1223,56 @@ func showProject(w fyne.Window, projectName string) {
 			}()
 		})
 		bottomButtons.Add(cloudSaveBtn)
+
+		// Кнопка переноса в команду (если проект уже в облаке и пользователь владелец)
+		proj := appData.Projects[projIdx]
+		if proj.CloudID > 0 && proj.OwnerID == currentAuth.UserID {
+			moveBtn := widget.NewButtonWithIcon("Перенести в команду", theme.MoveUpIcon(), func() {
+				// Загружаем команды пользователя
+				teams, err := loadTeams(currentAuth.GetToken())
+				if err != nil || len(teams) == 0 {
+					dialog.ShowInformation("Нет команд", "Вы не состоите ни в одной команде.", w)
+					return
+				}
+
+				teamNames := []string{"(Личный проект)"}
+				teamMap := make(map[string]*uint)
+				teamMap["(Личный проект)"] = nil
+
+				for _, t := range teams {
+					teamNames = append(teamNames, t.Name)
+					tid := t.ID
+					teamMap[t.Name] = &tid
+				}
+
+				selectTeam := widget.NewSelect(teamNames, nil)
+				if proj.TeamID != nil {
+					for _, t := range teams {
+						if t.ID == *proj.TeamID {
+							selectTeam.SetSelected(t.Name)
+							break
+						}
+					}
+				} else {
+					selectTeam.SetSelected("(Личный проект)")
+				}
+
+				dialog.ShowForm("Перенос проекта", "Перенести", "Отмена",
+					[]*widget.FormItem{widget.NewFormItem("Команда:", selectTeam)},
+					func(ok bool) {
+						if ok && selectTeam.Selected != "" {
+							tid := teamMap[selectTeam.Selected]
+							err := moveProjectToTeam(proj.CloudID, tid, currentAuth.GetToken())
+							if err != nil {
+								dialog.ShowError(err, w)
+							} else {
+								dialog.ShowInformation("Готово", "Проект перенесён.", w)
+							}
+						}
+					}, w)
+			})
+			bottomButtons.Add(moveBtn)
+		}
 	}
 
 	content := container.NewBorder(
