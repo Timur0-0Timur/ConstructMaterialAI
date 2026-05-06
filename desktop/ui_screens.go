@@ -258,6 +258,13 @@ func showProjectList(w fyne.Window) {
 			}
 			teamSelect.Options = names
 			teamSelect.Refresh()
+			
+			// Автоматически выбираем первую команду или обновляем проекты выбранной
+			if len(names) > 0 && teamSelect.Selected == "" {
+				teamSelect.SetSelected(names[0])
+			} else if teamSelect.Selected != "" {
+				teamSelect.OnChanged(teamSelect.Selected)
+			}
 		}
 		
 		teamSelect.OnChanged = func(name string) {
@@ -274,9 +281,11 @@ func showProjectList(w fyne.Window) {
 			for _, cp := range projects {
 				cloudProj := cp // capture
 				card := createProjectCard(w, Project{
-					Name: cloudProj.Name, 
-					TeamID: cloudProj.TeamID,
-					OwnerID: cloudProj.OwnerID,
+					Name:             cloudProj.Name, 
+					TeamID:           cloudProj.TeamID,
+					OwnerID:          cloudProj.OwnerID,
+					CloudItemCount:   cloudProj.ItemCount,
+					CloudTotalWeight: cloudProj.TotalWeight,
 				}, func() {
 					// При открытии загружаем детальную информацию и сохраняем локально
 					token := currentAuth.GetToken()
@@ -325,7 +334,51 @@ func showProjectList(w fyne.Window) {
 
 		teamTopBar := container.NewHBox(widget.NewLabel("Команда:"), teamSelect, layout.NewSpacer(), manageTeamsBtn)
 		
-		teamTabContent := container.NewBorder(container.NewPadded(teamTopBar), nil, nil, nil, teamScrollable)
+		createTeamProjectBtn := widget.NewButtonWithIcon("Создать проект команды", theme.ContentAddIcon(), func() {
+			if teamSelect.Selected == "" {
+				dialog.ShowInformation("Внимание", "Сначала выберите команду", w)
+				return
+			}
+			t, ok := teamMap[teamSelect.Selected]
+			if !ok { return }
+
+			nameEntry := widget.NewEntry()
+			nameEntry.SetPlaceHolder("Название проекта")
+
+			dialog.ShowForm("Новый проект команды", "Создать", "Отмена",
+				[]*widget.FormItem{
+					widget.NewFormItem("Имя", nameEntry),
+				},
+				func(ok bool) {
+					if !ok || strings.TrimSpace(nameEntry.Text) == "" {
+						return
+					}
+					newProject := Project{
+						Name:      strings.TrimSpace(nameEntry.Text),
+						Equipment: []Equipment{},
+						TeamID:    &t.ID,
+					}
+					
+					go func() {
+						cloudID, err := saveProjectToCloud(newProject, currentAuth.GetToken())
+						fyne.Do(func() {
+							if err != nil {
+								dialog.ShowError(fmt.Errorf("Ошибка создания в облаке: %w", err), w)
+								return
+							}
+							newProject.CloudID = cloudID
+							appData.Projects = append(appData.Projects, newProject)
+							_ = saveProjects(appData)
+							
+							// Сразу открываем новый проект
+							showProject(w, newProject.Name)
+						})
+					}()
+				}, w)
+		})
+		createTeamProjectBtn.Importance = widget.HighImportance
+
+		teamTabContent := container.NewBorder(container.NewPadded(teamTopBar), container.NewPadded(createTeamProjectBtn), nil, nil, teamScrollable)
 		teamProjectsTab := container.NewTabItem("Проекты команд", teamTabContent)
 		
 		tabs := container.NewAppTabs(myProjectsTab, teamProjectsTab)
@@ -1199,7 +1252,7 @@ func showProject(w fyne.Window, projectName string) {
 			}
 			token := currentAuth.GetToken()
 			go func() {
-				err := saveProjectToCloud(currentProject, token)
+				cloudID, err := saveProjectToCloud(currentProject, token)
 				fyne.Do(func() {
 					if err != nil {
 						if err.Error() == "CONFLICT_VERSION" {
@@ -1217,7 +1270,14 @@ func showProject(w fyne.Window, projectName string) {
 							dialog.ShowError(fmt.Errorf("Ошибка облачного сохранения: %w", err), w)
 						}
 					} else {
+						// Обновляем CloudID локально
+						if cloudID > 0 && currentProject.CloudID == 0 {
+							appData.Projects[projIdx].CloudID = cloudID
+							_ = saveProjects(appData)
+						}
 						dialog.ShowInformation("Облако", "Проект успешно сохранён в облако!", w)
+						// Обновляем UI, если нужно
+						w.Content().Refresh()
 					}
 				})
 			}()
@@ -1266,7 +1326,11 @@ func showProject(w fyne.Window, projectName string) {
 							if err != nil {
 								dialog.ShowError(err, w)
 							} else {
+								// Обновляем локально
+								appData.Projects[projIdx].TeamID = tid
+								_ = saveProjects(appData)
 								dialog.ShowInformation("Готово", "Проект перенесён.", w)
+								showProject(w, proj.Name) // Перерисовываем экран проекта
 							}
 						}
 					}, w)

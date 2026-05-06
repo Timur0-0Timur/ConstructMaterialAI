@@ -53,7 +53,7 @@ func GetProjectsByUser(userID uint) ([]models.Project, error) {
 	}
 
 	var projects []models.Project
-	query := db.DB.Order("created_at DESC")
+	query := db.DB.Preload("EquipmentItems").Order("created_at DESC")
 
 	if len(teamIDs) > 0 {
 		query = query.Where(
@@ -81,7 +81,7 @@ func GetPersonalProjects(userID uint) ([]models.Project, error) {
 // GetProjectsByTeam возвращает проекты конкретной команды
 func GetProjectsByTeam(teamID uint) ([]models.Project, error) {
 	var projects []models.Project
-	err := db.DB.
+	err := db.DB.Preload("EquipmentItems").
 		Where("team_id = ?", teamID).
 		Order("created_at DESC").
 		Find(&projects).Error

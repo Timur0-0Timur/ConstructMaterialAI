@@ -324,10 +324,18 @@ func listTeamProjectsHandler(w http.ResponseWriter, r *http.Request, teamID uint
 
 	result := make([]projectListItem, 0, len(projects))
 	for _, p := range projects {
+		var totalWeight float64
+		for _, item := range p.EquipmentItems {
+			if item.WeightResult != nil {
+				totalWeight += *item.WeightResult
+			}
+		}
 		result = append(result, projectListItem{
 			ID:          p.ID,
 			Name:        p.Name,
 			Description: p.Description,
+			ItemCount:   len(p.EquipmentItems),
+			TotalWeight: totalWeight,
 			TeamID:      p.TeamID,
 			OwnerID:     p.UserID,
 			CreatedAt:   p.CreatedAt,

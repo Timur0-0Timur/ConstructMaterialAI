@@ -39,9 +39,16 @@ type Project struct {
 	TeamID    *uint     `json:"team_id,omitempty"`
 	OwnerID   uint      `json:"owner_id,omitempty"`
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
+
+	// Кэшированные данные из облака (для отображения в списке без загрузки всего оборудования)
+	CloudItemCount   int     `json:"-"`
+	CloudTotalWeight float64 `json:"-"`
 }
 
 func (p Project) TotalWeight() float64 {
+	if len(p.Equipment) == 0 && p.CloudTotalWeight > 0 {
+		return p.CloudTotalWeight
+	}
 	var total float64
 	for _, eq := range p.Equipment {
 		total += eq.CalculatedWeight * float64(eq.Quantity)
@@ -50,6 +57,9 @@ func (p Project) TotalWeight() float64 {
 }
 
 func (p Project) EquipmentCount() int {
+	if len(p.Equipment) == 0 && p.CloudItemCount > 0 {
+		return p.CloudItemCount
+	}
 	var count int
 	for _, eq := range p.Equipment {
 		count += eq.Quantity

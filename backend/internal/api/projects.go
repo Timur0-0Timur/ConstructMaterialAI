@@ -22,6 +22,7 @@ type equipmentItemDTO struct {
 type createProjectRequest struct {
 	Name           string             `json:"name"`
 	Description    string             `json:"description"`
+	TeamID         *uint              `json:"team_id,omitempty"`
 	EquipmentItems []equipmentItemDTO `json:"equipment_items"`
 }
 
@@ -30,6 +31,7 @@ type projectListItem struct {
 	Name        string    `json:"name"`
 	Description string    `json:"description"`
 	ItemCount   int       `json:"item_count"`
+	TotalWeight float64   `json:"total_weight"`
 	TeamID      *uint     `json:"team_id,omitempty"`
 	OwnerID     uint      `json:"owner_id"`
 	CreatedAt   time.Time `json:"created_at"`
@@ -278,6 +280,7 @@ func createProjectHandler(w http.ResponseWriter, r *http.Request) {
 		UserID:      userID,
 		Name:        strings.TrimSpace(req.Name),
 		Description: req.Description,
+		TeamID:      req.TeamID,
 	}
 
 	for _, dto := range req.EquipmentItems {
@@ -321,10 +324,18 @@ func listProjectsHandler(w http.ResponseWriter, r *http.Request) {
 
 	result := make([]projectListItem, 0, len(projects))
 	for _, p := range projects {
+		var totalWeight float64
+		for _, item := range p.EquipmentItems {
+			if item.WeightResult != nil {
+				totalWeight += *item.WeightResult
+			}
+		}
 		result = append(result, projectListItem{
 			ID:          p.ID,
 			Name:        p.Name,
 			Description: p.Description,
+			ItemCount:   len(p.EquipmentItems),
+			TotalWeight: totalWeight,
 			TeamID:      p.TeamID,
 			OwnerID:     p.UserID,
 			CreatedAt:   p.CreatedAt,

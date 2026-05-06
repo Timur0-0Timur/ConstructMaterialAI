@@ -161,6 +161,7 @@ type cloudEquipmentItem struct {
 type cloudCreateProjectRequest struct {
 	Name           string               `json:"name"`
 	Description    string               `json:"description"`
+	TeamID         *uint                `json:"team_id,omitempty"`
 	EquipmentItems []cloudEquipmentItem `json:"equipment_items"`
 	UpdatedAt      time.Time            `json:"updated_at,omitempty"`
 }
@@ -170,6 +171,7 @@ type cloudProjectListItem struct {
 	Name        string    `json:"name"`
 	Description string    `json:"description"`
 	ItemCount   int       `json:"item_count"`
+	TotalWeight float64   `json:"total_weight"`
 	TeamID      *uint     `json:"team_id,omitempty"`
 	OwnerID     uint      `json:"owner_id"`
 	CreatedAt   time.Time `json:"created_at"`
@@ -187,12 +189,12 @@ type cloudProjectDetail struct {
 }
 
 // saveProjectToCloud отправляет проект на бэкенд с JWT токеном (POST для новых, PUT для существующих).
-func saveProjectToCloud(proj Project, token string) error {
+func saveProjectToCloud(proj Project, token string) (uint, error) {
 	items := make([]cloudEquipmentItem, 0, len(proj.Equipment))
 	for _, eq := range proj.Equipment {
 		params, err := json.Marshal(eq)
 		if err != nil {
-			return fmt.Errorf("ошибка сериализации оборудования: %w", err)
+			return 0, fmt.Errorf("ошибка сериализации оборудования: %w", err)
 		}
 		w := eq.CalculatedWeight
 		items = append(items, cloudEquipmentItem{
@@ -204,6 +206,7 @@ func saveProjectToCloud(proj Project, token string) error {
 
 	payload := cloudCreateProjectRequest{
 		Name:           proj.Name,
+		TeamID:         proj.TeamID,
 		EquipmentItems: items,
 		UpdatedAt:      proj.UpdatedAt, // для проверки конфликта версий
 	}
@@ -218,7 +221,7 @@ func saveProjectToCloud(proj Project, token string) error {
 
 	req, err := http.NewRequest(method, url, bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("ошибка создания запроса: %w", err)
+		return 0, fmt.Errorf("ошибка создания запроса: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -226,26 +229,35 @@ func saveProjectToCloud(proj Project, token string) error {
 	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("сервер недоступен: %w", err)
+		return 0, fmt.Errorf("сервер недоступен: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusConflict {
-		return fmt.Errorf("CONFLICT_VERSION") // Специальный маркер для UI
+		return 0, fmt.Errorf("CONFLICT_VERSION") // Специальный маркер для UI
 	}
 
+	raw, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
-		raw, _ := io.ReadAll(resp.Body)
 		var errResp struct {
 			Error string `json:"error"`
 		}
 		_ = json.Unmarshal(raw, &errResp)
 		if errResp.Error != "" {
-			return fmt.Errorf("%s", errResp.Error)
+			return 0, fmt.Errorf("%s", errResp.Error)
 		}
-		return fmt.Errorf("ошибка сервера: %d", resp.StatusCode)
+		return 0, fmt.Errorf("ошибка сервера: %d", resp.StatusCode)
 	}
-	return nil
+	
+	var successResp struct {
+		ID uint `json:"id"`
+	}
+	_ = json.Unmarshal(raw, &successResp)
+	if successResp.ID > 0 {
+		return successResp.ID, nil
+	}
+	
+	return proj.CloudID, nil
 }
 
 // loadCloudProjectList загружает список проектов из облака.
@@ -620,22 +632,33 @@ func showCloudLoadDialog(w fyne.Window) {
 							}
 							localProj := cloudProjectToLocal(detail)
 							appData := loadProjects()
-							// Не добавляем дубликат если проект с таким именем уже есть
-							for _, existing := range appData.Projects {
+							
+							saveAndFinish := func() {
+								if err := saveProjects(appData); err != nil {
+									dialog.ShowError(err, w)
+									return
+								}
+								dialog.ShowInformation("Успех",
+									fmt.Sprintf("Проект «%s» загружен из облака", localProj.Name), w)
+								showProjectList(w)
+							}
+
+							for i, existing := range appData.Projects {
 								if existing.Name == localProj.Name {
-									dialog.ShowInformation("Облако",
-										fmt.Sprintf("Проект «%s» уже существует локально", localProj.Name), w)
+									dialog.ShowConfirm("Облако",
+										fmt.Sprintf("Проект «%s» уже существует локально.\nХотите перезаписать его версией из облака?", localProj.Name),
+										func(ok bool) {
+											if ok {
+												appData.Projects[i] = localProj
+												saveAndFinish()
+											}
+										}, w)
 									return
 								}
 							}
+							
 							appData.Projects = append(appData.Projects, localProj)
-							if err := saveProjects(appData); err != nil {
-								dialog.ShowError(err, w)
-								return
-							}
-							dialog.ShowInformation("Успех",
-								fmt.Sprintf("Проект «%s» загружен из облака", localProj.Name), w)
-							showProjectList(w)
+							saveAndFinish()
 						})
 					}()
 				}, w)
