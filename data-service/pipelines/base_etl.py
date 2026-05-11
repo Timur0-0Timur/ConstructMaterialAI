@@ -161,8 +161,8 @@ class BaseETLPipeline:
         try:
             engine = create_engine(engine_url)
 
-            logger.info(f"Создаем таблицу {table_prefix}_ml и заливаем данные...")
-            df.to_sql(f"{table_prefix}_ml", engine, if_exists='replace', index=False)
+            logger.info(f"Создаем таблицу {table_prefix}_ml в схеме sync и заливаем данные...")
+            df.to_sql(f"{table_prefix}_ml", engine, schema='sync', if_exists='replace', index=False)
 
             logger.info('Данные успешно сохранены в облачную БД Neon.')
 

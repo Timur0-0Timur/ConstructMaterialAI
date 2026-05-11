@@ -28,6 +28,16 @@ func Connect() error {
 		return fmt.Errorf("ошибка подключения к БД: %w", err)
 	}
 
+	// Создаем схему sync, если она не существует
+	if err := DB.Exec("CREATE SCHEMA IF NOT EXISTS sync").Error; err != nil {
+		return fmt.Errorf("ошибка создания схемы sync: %w", err)
+	}
+
+	// Устанавливаем путь поиска (search_path) на sync, чтобы все запросы шли туда по умолчанию
+	if err := DB.Exec("SET search_path TO sync,public").Error; err != nil {
+		return fmt.Errorf("ошибка установки search_path: %w", err)
+	}
+
 	sqlDB, err := DB.DB()
 	if err != nil {
 		return fmt.Errorf("ошибка получения sql.DB: %w", err)
