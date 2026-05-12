@@ -124,7 +124,7 @@ func (e ImportError) String() string {
 	return fmt.Sprintf("Лист «%s», строка %d: в колонке «%s» %s", e.Sheet, e.Row, e.Column, e.Msg)
 }
 
-func createTitlePage(f *excelize.File) error {
+func createTitlePage(f *excelize.File, equipment []Equipment) error {
 	if err := f.SetSheetName(defaultSheetFix, sheetTitlePage); err != nil {
 		return fmt.Errorf("ошибка переименования листа: %w", err)
 	}
@@ -150,23 +150,84 @@ func createTitlePage(f *excelize.File) error {
 		return err
 	}
 
-	_ = f.SetCellValue(sheetTitlePage, "A1", "Опись оборудования проекта")
+	weightStyle, err := f.NewStyle(&excelize.Style{
+		Font: &excelize.Font{
+			Size: 14,
+		},
+		Alignment: &excelize.Alignment{
+			Horizontal: "right",
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	_ = f.SetCellValue(sheetTitlePage, "A1", "Единицы оборудования проекта")
 	_ = f.SetCellStyle(sheetTitlePage, "A1", "A1", titleStyle)
 
 	_ = f.SetColWidth(sheetTitlePage, "A", "A", 40)
+	_ = f.SetColWidth(sheetTitlePage, "B", "B", 20)
+	_ = f.SetColWidth(sheetTitlePage, "D", "D", 35)
+	_ = f.SetColWidth(sheetTitlePage, "E", "E", 20)
+
+	// Подсчет весов по типам
+	weightsByType := make(map[string]float64)
+	var totalWeight float64
+	for _, eq := range equipment {
+		w := eq.CalculatedWeight * float64(eq.Quantity)
+		totalWeight += w
+		var sName string
+		switch eq.Type {
+		case "Насосы":
+			sName = sheetPumps
+		case "Конвейер":
+			sName = sheetConveyor
+		case "Вертикальный аппарат":
+			sName = sheetVessels
+		case "Горизонтальная емкость":
+			sName = sheetDrums
+		case "Теплообменник":
+			sName = sheetUTubes
+		case "Колонна":
+			sName = sheetTower
+		}
+		if sName != "" {
+			weightsByType[sName] += w
+		}
+	}
 
 	startRow := 3
 	for i, sheet := range sheetOrder {
-		cell := fmt.Sprintf("A%d", startRow+i)
+		row := startRow + i
+		cellA := fmt.Sprintf("A%d", row)
+		cellB := fmt.Sprintf("B%d", row)
+
 		displayName := sheet
 		if sheet == sheetConveyor {
 			displayName = "Конвейеры"
 		}
-		_ = f.SetCellValue(sheetTitlePage, cell, displayName)
+		_ = f.SetCellValue(sheetTitlePage, cellA, displayName)
 
 		link := fmt.Sprintf("'%s'!A1", sheet)
-		_ = f.SetCellHyperLink(sheetTitlePage, cell, link, "Location")
-		_ = f.SetCellStyle(sheetTitlePage, cell, cell, linkStyle)
+		_ = f.SetCellHyperLink(sheetTitlePage, cellA, link, "Location")
+		_ = f.SetCellStyle(sheetTitlePage, cellA, cellA, linkStyle)
+
+		if len(equipment) > 0 {
+			w := weightsByType[sheet]
+			_ = f.SetCellValue(sheetTitlePage, cellB, w)
+			_ = f.SetCellStyle(sheetTitlePage, cellB, cellB, weightStyle)
+		}
+	}
+
+	if len(equipment) > 0 {
+		cellLabel := "D3"
+		cellVal := "E3"
+
+		_ = f.SetCellValue(sheetTitlePage, cellLabel, "Итоговый вес проекта (кг)")
+		_ = f.SetCellValue(sheetTitlePage, cellVal, totalWeight)
+
+		_ = f.SetCellStyle(sheetTitlePage, cellLabel, cellLabel, titleStyle)
+		_ = f.SetCellStyle(sheetTitlePage, cellVal, cellVal, titleStyle)
 	}
 
 	return nil
@@ -200,7 +261,7 @@ func generateTemplate(filePath string) error {
 		return fmt.Errorf("ошибка создания стиля: %w", err)
 	}
 
-	if err := createTitlePage(f); err != nil {
+	if err := createTitlePage(f, nil); err != nil {
 		return err
 	}
 
@@ -246,7 +307,7 @@ func exportProject(filePath string, equipment []Equipment) error {
 		return fmt.Errorf("ошибка создания стиля: %w", err)
 	}
 
-	if err := createTitlePage(f); err != nil {
+	if err := createTitlePage(f, equipment); err != nil {
 		return err
 	}
 
