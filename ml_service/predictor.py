@@ -260,3 +260,49 @@ class UTubePredictor:
 
         logger.info(f"Предсказание (UTube): weight_kg={weight_kg:.2f}")
         return float(weight_kg)
+
+# --- TOWER PREDICTOR ---
+
+TOWER_FEATURE_COLUMNS = [
+    "diameter",
+    "ss_dist",
+    "pressure",
+    "trays_num"
+]
+
+TOWER_MODELS_DIR = Path(__file__).resolve().parent / "models"
+
+class TowerPredictor:
+    """Предиктор веса колонн (Tower) с помощью RandomForestRegressor Pipeline."""
+
+    def __init__(self, models_dir: Path = TOWER_MODELS_DIR):
+        model_path = models_dir / "tower_weight_model.joblib"
+
+        if not model_path.exists():
+            alt_path = Path(__file__).resolve().parent / "tower_weight_model.joblib"
+            if alt_path.exists():
+                model_path = alt_path
+            else:
+                raise FileNotFoundError(f"Файл модели не найден: {model_path}")
+
+        self.model = joblib.load(model_path)
+        logger.info("Модель колонны загружена успешно (tower_weight_model).")
+
+    def predict(self, features_dict: dict) -> float:
+        # Собираем вектор параметров в нужном порядке
+        raw_features = []
+        for col in TOWER_FEATURE_COLUMNS:
+            value = features_dict.get(col)
+            if value is None:
+                raise ValueError(f"Отсутствует обязательный параметр для модели: '{col}'")
+            raw_features.append(float(value))
+
+        import pandas as pd
+        # Модель была обучена на DataFrame с именами колонок, поэтому создаем DataFrame
+        X = pd.DataFrame([raw_features], columns=TOWER_FEATURE_COLUMNS)
+
+        # Предсказание 
+        weight_kg = self.model.predict(X)[0]
+
+        logger.info(f"Предсказание (Tower): weight_kg={weight_kg:.2f}")
+        return float(weight_kg)

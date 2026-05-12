@@ -19,7 +19,7 @@ type Equipment struct {
 	BeltWidth        *float64 `json:"belt_width,omitempty"`
 	ConveyorFlowRate *float64 `json:"conveyor_flow_rate,omitempty"`
 
-	// Vessel/Drum
+	// Vessel/Drum/Tower
 	VesselDiameter               *float64 `json:"vessel_diameter,omitempty"`
 	DesignTangentToTangentLength *float64 `json:"design_tangent_to_tangent_length,omitempty"`
 	VesselTangentToTangentHeight *float64 `json:"vessel_tangent_to_tangent_height,omitempty"`
@@ -27,6 +27,7 @@ type Equipment struct {
 	DesignTemperature            *float64 `json:"design_temperature,omitempty"`
 	SkirtHeight                  *float64 `json:"skirt_height,omitempty"`
 	VesselLegHeight              *float64 `json:"vessel_leg_height,omitempty"`
+	NumberOfTrays                *float64 `json:"number_of_trays,omitempty"`
 
 	// Теплообменники (U-Tube)
 	ShellDiameter   *float64 `json:"shell_diameter,omitempty"`

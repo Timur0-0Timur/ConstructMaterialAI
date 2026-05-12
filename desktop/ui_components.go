@@ -72,6 +72,8 @@ type equipmentRow struct {
 	skirtHeightEntry                  *widget.Entry
 	vesselLegHeightLabel              *canvas.Text
 	vesselLegHeightEntry              *widget.Entry
+	numberOfTraysLabel                *canvas.Text
+	numberOfTraysEntry                *widget.Entry
 
 	shellDiameterLabel   *canvas.Text
 	shellDiameterEntry   *widget.Entry
@@ -142,7 +144,7 @@ func (r *equipmentRow) refreshTheme() {
 		r.vesselDiameterLabel, r.vesselTangentToTangentHeightLabel,
 		r.designGaugePressureLabel, r.designTemperatureLabel,
 		r.skirtHeightLabel, r.vesselLegHeightLabel,
-		r.designTangentToTangentLengthLabel,
+		r.designTangentToTangentLengthLabel, r.numberOfTraysLabel,
 		r.shellDiameterLabel, r.tubeOutDiameterLabel, r.tubeLenLabel,
 		r.tubeDesPresLabel, r.heatAreaLabel,
 	}
@@ -297,6 +299,30 @@ func (r *equipmentRow) collectEquipment() (Equipment, error) {
 		eq.DesignTemperature, err = parseOptionalFloat(r.designTemperatureEntry.Text)
 		if err != nil {
 			r.markFieldInvalid(r.designTemperatureEntry, r.designTemperatureLabel, true)
+		}
+
+	case "Колонна":
+		vesselDiameter, err := parseOptionalFloat(r.vesselDiameterEntry.Text)
+		if err != nil || vesselDiameter == nil {
+			r.markFieldInvalid(r.vesselDiameterEntry, r.vesselDiameterLabel, true)
+			return eq, fmt.Errorf("Диаметр обязателен")
+		}
+		eq.VesselDiameter = vesselDiameter
+
+		numberOfTrays, err := parseOptionalFloat(r.numberOfTraysEntry.Text)
+		if err != nil || numberOfTrays == nil {
+			r.markFieldInvalid(r.numberOfTraysEntry, r.numberOfTraysLabel, true)
+			return eq, fmt.Errorf("Количество тарелок обязательно")
+		}
+		eq.NumberOfTrays = numberOfTrays
+
+		eq.DesignTangentToTangentLength, err = parseOptionalFloat(r.designTangentToTangentLengthEntry.Text)
+		if err != nil {
+			r.markFieldInvalid(r.designTangentToTangentLengthEntry, r.designTangentToTangentLengthLabel, true)
+		}
+		eq.DesignGaugePressure, err = parseOptionalFloat(r.designGaugePressureEntry.Text)
+		if err != nil {
+			r.markFieldInvalid(r.designGaugePressureEntry, r.designGaugePressureLabel, true)
 		}
 
 	case "Теплообменник":
@@ -475,6 +501,7 @@ func (r *equipmentRow) clearValidation() {
 		r.vesselDiameterEntry, r.designTangentToTangentLengthEntry,
 		r.vesselTangentToTangentHeightEntry, r.designGaugePressureEntry,
 		r.designTemperatureEntry, r.skirtHeightEntry, r.vesselLegHeightEntry,
+		r.numberOfTraysEntry,
 		r.shellDiameterEntry, r.tubeOutDiameterEntry, r.tubeLenEntry,
 		r.tubeDesPresEntry, r.heatAreaEntry,
 	}
@@ -499,6 +526,7 @@ func (r *equipmentRow) clearValidation() {
 	setLabelError(r.designTemperatureLabel, false)
 	setLabelError(r.skirtHeightLabel, false)
 	setLabelError(r.vesselLegHeightLabel, false)
+	setLabelError(r.numberOfTraysLabel, false)
 	setLabelError(r.shellDiameterLabel, false)
 	setLabelError(r.tubeOutDiameterLabel, false)
 	setLabelError(r.tubeLenLabel, false)
@@ -780,5 +808,54 @@ func buildUTubeFields(row *equipmentRow) *fyne.Container {
 		tubeLenObj, row.tubeLenEntry,
 		tubeDesPresObj, row.tubeDesPresEntry,
 		heatAreaObj, row.heatAreaEntry,
+	)
+}
+
+func buildTowerFields(row *equipmentRow) *fyne.Container {
+	vesselDiameterLabel, vesselDiameterObj := createLabel("Диаметр аппарата (м):", true)
+	row.vesselDiameterLabel = vesselDiameterLabel
+	row.vesselDiameterEntry = widget.NewEntry()
+	row.vesselDiameterEntry.SetPlaceHolder("Введите диаметр (м)")
+	row.vesselDiameterEntry.OnChanged = func(s string) {
+		val, err := parseOptionalFloat(s)
+		row.markFieldInvalid(row.vesselDiameterEntry, row.vesselDiameterLabel, err != nil || val == nil)
+		row.dataChanged(true)
+	}
+
+	numberOfTraysLabel, numberOfTraysObj := createLabel("Количество тарелок:", true)
+	row.numberOfTraysLabel = numberOfTraysLabel
+	row.numberOfTraysEntry = widget.NewEntry()
+	row.numberOfTraysEntry.SetPlaceHolder("Введите количество тарелок")
+	row.numberOfTraysEntry.OnChanged = func(s string) {
+		val, err := parseOptionalFloat(s)
+		row.markFieldInvalid(row.numberOfTraysEntry, row.numberOfTraysLabel, err != nil || val == nil)
+		row.dataChanged(true)
+	}
+
+	designTangentToTangentLengthLabel, designTangentToTangentLengthObj := createLabel("Длина (T/T, м):", false)
+	row.designTangentToTangentLengthLabel = designTangentToTangentLengthLabel
+	row.designTangentToTangentLengthEntry = widget.NewEntry()
+	row.designTangentToTangentLengthEntry.SetPlaceHolder("Введите длину (м)")
+	row.designTangentToTangentLengthEntry.OnChanged = func(s string) {
+		_, err := parseOptionalFloat(s)
+		row.markFieldInvalid(row.designTangentToTangentLengthEntry, row.designTangentToTangentLengthLabel, err != nil)
+		row.dataChanged(true)
+	}
+
+	designGaugePressureLabel, designGaugePressureObj := createLabel("Давление (МПа):", false)
+	row.designGaugePressureLabel = designGaugePressureLabel
+	row.designGaugePressureEntry = widget.NewEntry()
+	row.designGaugePressureEntry.SetPlaceHolder("Давление")
+	row.designGaugePressureEntry.OnChanged = func(s string) {
+		_, err := parseOptionalFloat(s)
+		row.markFieldInvalid(row.designGaugePressureEntry, row.designGaugePressureLabel, err != nil)
+		row.dataChanged(true)
+	}
+
+	return container.New(layout.NewFormLayout(),
+		vesselDiameterObj, row.vesselDiameterEntry,
+		numberOfTraysObj, row.numberOfTraysEntry,
+		designTangentToTangentLengthObj, row.designTangentToTangentLengthEntry,
+		designGaugePressureObj, row.designGaugePressureEntry,
 	)
 }
