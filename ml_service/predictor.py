@@ -215,3 +215,48 @@ class DrumPredictor:
 
         logger.info(f"Предсказание (Drum): weight_kg={weight_kg:.2f}")
         return float(weight_kg)
+
+# --- UTUBE PREDICTOR ---
+
+UTUBE_FEATURE_COLUMNS = [
+    "heat_area",
+    "shell_diameter",
+    "tube_out_diameter",
+    "tube_des_pres",
+    "tube_len",
+]
+
+UTUBE_MODELS_DIR = Path(__file__).resolve().parent / "models"
+
+class UTubePredictor:
+    """Предиктор веса теплообменников (U-Tube) с помощью RandomForestRegressor."""
+
+    def __init__(self, models_dir: Path = UTUBE_MODELS_DIR):
+        model_path = models_dir / "utube_weight_model.joblib"
+
+        if not model_path.exists():
+            alt_path = Path(__file__).resolve().parent / "utube_weight_model.joblib"
+            if alt_path.exists():
+                model_path = alt_path
+            else:
+                raise FileNotFoundError(f"Файл модели не найден: {model_path}")
+
+        self.model = joblib.load(model_path)
+        logger.info("Модель U-Tube теплообменника загружена успешно (utube_weight_model).")
+
+    def predict(self, features_dict: dict) -> float:
+        # Собираем вектор параметров в нужном порядке
+        raw_features = []
+        for col in UTUBE_FEATURE_COLUMNS:
+            value = features_dict.get(col)
+            if value is None:
+                raise ValueError(f"Отсутствует обязательный параметр для модели: '{col}'")
+            raw_features.append(float(value))
+
+        X = np.array([raw_features])
+
+        # Предсказание 
+        weight_kg = self.model.predict(X)[0]
+
+        logger.info(f"Предсказание (UTube): weight_kg={weight_kg:.2f}")
+        return float(weight_kg)

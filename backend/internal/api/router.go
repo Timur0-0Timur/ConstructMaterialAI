@@ -14,6 +14,7 @@ func RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/drum/estimate", DrumHandler)
 	mux.HandleFunc("/vessel/estimate", VesselHandler)
 	mux.HandleFunc("/conveyor/estimate", ConveyorHandler)
+	mux.HandleFunc("/utube/estimate", UTubeHandler)
 
 	// Авторизация
 	mux.HandleFunc("/api/auth/register", RegisterHandler)

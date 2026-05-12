@@ -28,6 +28,13 @@ type Equipment struct {
 	SkirtHeight                  *float64 `json:"skirt_height,omitempty"`
 	VesselLegHeight              *float64 `json:"vessel_leg_height,omitempty"`
 
+	// Теплообменники (U-Tube)
+	ShellDiameter   *float64 `json:"shell_diameter,omitempty"`
+	TubeOutDiameter *float64 `json:"tube_out_diameter,omitempty"`
+	TubeLen         *float64 `json:"tube_len,omitempty"`
+	TubeDesPres     *float64 `json:"tube_des_pres,omitempty"`
+	HeatArea        *float64 `json:"heat_area,omitempty"`
+
 	CalculatedWeight float64 `json:"calculated_weight"`
 }
 

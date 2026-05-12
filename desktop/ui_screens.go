@@ -649,6 +649,8 @@ func showProject(w fyne.Window, projectName string) {
 			return buildVesselFields(row)
 		case "Горизонтальная емкость":
 			return buildDrumFields(row)
+		case "Теплообменник":
+			return buildUTubeFields(row)
 		default:
 			return container.NewVBox(widget.NewLabel("Неизвестный тип оборудования"))
 		}
@@ -720,6 +722,12 @@ func showProject(w fyne.Window, projectName string) {
 			row.designTangentToTangentLengthEntry.SetText(floatPtrToStr(eq.DesignTangentToTangentLength))
 			row.designGaugePressureEntry.SetText(floatPtrToStr(eq.DesignGaugePressure))
 			row.designTemperatureEntry.SetText(floatPtrToStr(eq.DesignTemperature))
+		case "Теплообменник":
+			row.shellDiameterEntry.SetText(floatPtrToStr(eq.ShellDiameter))
+			row.tubeOutDiameterEntry.SetText(floatPtrToStr(eq.TubeOutDiameter))
+			row.tubeLenEntry.SetText(floatPtrToStr(eq.TubeLen))
+			row.tubeDesPresEntry.SetText(floatPtrToStr(eq.TubeDesPres))
+			row.heatAreaEntry.SetText(floatPtrToStr(eq.HeatArea))
 		}
 
 		calcBtn := widget.NewButtonWithIcon("Рассчитать", theme.ConfirmIcon(), func() {

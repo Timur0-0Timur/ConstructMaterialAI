@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional, Any, Dict
 
-from .service import get_pump_estimation, get_vessel_estimation, get_conveyor_estimation, get_drum_estimation
+from .service import get_pump_estimation, get_vessel_estimation, get_conveyor_estimation, get_drum_estimation, get_utube_estimation
 
 app = FastAPI(title="Pump Data/ML Service", version="1.0.0")
 
@@ -57,6 +57,17 @@ class ConveyorRequest(BaseModel):
     driver_power_per_second: Optional[float] = Field(default=None, ge=0)     # допускаем 0
     conveyor_speed: Optional[float] = Field(default=None, ge=0)              # допускаем 0
     number_of_walkways: Optional[float] = Field(default=None, ge=0)          # допускаем 0
+
+
+class UTubeRequest(BaseModel):
+    tag: str = Field(..., min_length=1)
+    shell_diameter: float = Field(..., gt=0)
+    tube_out_diameter: float = Field(..., gt=0)
+    tube_len: float = Field(..., gt=0)
+
+    # опциональные
+    tube_des_pres: Optional[float] = Field(default=None, ge=0)
+    heat_area: Optional[float] = Field(default=None, ge=0)
 
 
 # ---------- RESPONSE MODEL ----------
@@ -132,3 +143,17 @@ def conveyor_estimate(req: ConveyorRequest):
         )
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/utube/estimate", response_model=Response)
+def utube_estimate(req: UTubeRequest):
+    try:
+        input_data = req.model_dump()
+        result = get_utube_estimation(input_data)
+
+        return Response(
+            model_version=MODEL_VERSION,
+            weight=result["weight"],
+            debug_features=result["features"]
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
