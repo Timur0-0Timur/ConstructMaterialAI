@@ -14,6 +14,8 @@ const (
 	conveyorBackendURL = "http://localhost:8080/conveyor/estimate"
 	vesselBackendURL   = "http://localhost:8080/vessel/estimate"
 	drumBackendURL     = "http://localhost:8080/drum/estimate"
+	utubeBackendURL    = "http://localhost:8080/utube/estimate"
+	towerBackendURL    = "http://localhost:8080/tower/estimate"
 )
 // Запросы к бэкенду
 type PumpRequest struct {
@@ -50,6 +52,23 @@ type DrumRequest struct {
 	DesignTemperature            *float64 `json:"design_temperature,omitempty"`
 }
 
+type UTubeRequest struct {
+	Tag             string   `json:"tag"`
+	ShellDiameter   *float64 `json:"shell_diameter"`
+	TubeOutDiameter *float64 `json:"tube_out_diameter"`
+	TubeLen         *float64 `json:"tube_len"`
+	TubeDesPres     *float64 `json:"tube_des_pres,omitempty"`
+	HeatArea        *float64 `json:"heat_area,omitempty"`
+}
+
+type TowerRequest struct {
+	Tag                          string   `json:"tag"`
+	VesselDiameter               *float64 `json:"vessel_diameter"`
+	DesignTangentToTangentLength *float64 `json:"design_tangent_to_tangent_length,omitempty"`
+	DesignGaugePressure          *float64 `json:"design_gauge_pressure,omitempty"`
+	NumberOfTrays                *float64 `json:"number_of_trays"`
+}
+
 type PumpResponse struct {
 	ModelVersion string  `json:"model_version"`
 	Weight       float64 `json:"weight"`
@@ -69,6 +88,17 @@ type DrumResponse struct {
 	ModelVersion string  `json:"model_version"`
 	Weight       float64 `json:"weight"`
 }
+
+type UTubeResponse struct {
+	ModelVersion string  `json:"model_version"`
+	Weight       float64 `json:"weight"`
+}
+
+type TowerResponse struct {
+	ModelVersion string  `json:"model_version"`
+	Weight       float64 `json:"weight"`
+}
+
 func sendPumpToBackend(data PumpRequest) (float64, error) {
 	jsonBody, err := json.Marshal(data)
 	if err != nil {
@@ -189,6 +219,66 @@ func sendDrumToBackend(data DrumRequest) (float64, error) {
 	return drumResp.Weight, nil
 }
 
+func sendUTubeToBackend(data UTubeRequest) (float64, error) {
+	jsonBody, err := json.Marshal(data)
+	if err != nil {
+		return 0, fmt.Errorf("ошибка JSON: %w", err)
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Post(utubeBackendURL, "application/json", bytes.NewReader(jsonBody))
+	if err != nil {
+		return 0, fmt.Errorf("сетевая ошибка: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, fmt.Errorf("ошибка чтения ответа: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("сервер (%d): %s", resp.StatusCode, string(body))
+	}
+
+	var utubeResp UTubeResponse
+	if err := json.Unmarshal(body, &utubeResp); err != nil {
+		return 0, fmt.Errorf("ошибка разбора ответа: %w", err)
+	}
+
+	return utubeResp.Weight, nil
+}
+
+func sendTowerToBackend(data TowerRequest) (float64, error) {
+	jsonBody, err := json.Marshal(data)
+	if err != nil {
+		return 0, fmt.Errorf("ошибка JSON: %w", err)
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Post(towerBackendURL, "application/json", bytes.NewReader(jsonBody))
+	if err != nil {
+		return 0, fmt.Errorf("сетевая ошибка: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, fmt.Errorf("ошибка чтения ответа: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("сервер (%d): %s", resp.StatusCode, string(body))
+	}
+
+	var towerResp TowerResponse
+	if err := json.Unmarshal(body, &towerResp); err != nil {
+		return 0, fmt.Errorf("ошибка разбора ответа: %w", err)
+	}
+
+	return towerResp.Weight, nil
+}
+
 func sendEquipmentToBackend(eq Equipment) (float64, error) {
 	switch eq.Type {
 	case "Насосы":
@@ -232,6 +322,27 @@ func sendEquipmentToBackend(eq Equipment) (float64, error) {
 			DesignTemperature:            eq.DesignTemperature,
 		}
 		return sendDrumToBackend(req)
+
+	case "Теплообменник":
+		req := UTubeRequest{
+			Tag:             eq.Tag,
+			ShellDiameter:   eq.ShellDiameter,
+			TubeOutDiameter: eq.TubeOutDiameter,
+			TubeLen:         eq.TubeLen,
+			TubeDesPres:     eq.TubeDesPres,
+			HeatArea:        eq.HeatArea,
+		}
+		return sendUTubeToBackend(req)
+
+	case "Колонна":
+		req := TowerRequest{
+			Tag:                          eq.Tag,
+			VesselDiameter:               eq.VesselDiameter,
+			DesignTangentToTangentLength: eq.DesignTangentToTangentLength,
+			DesignGaugePressure:          eq.DesignGaugePressure,
+			NumberOfTrays:                eq.NumberOfTrays,
+		}
+		return sendTowerToBackend(req)
 
 	default:
 		return 0, fmt.Errorf("неизвестный тип оборудования: %s", eq.Type)

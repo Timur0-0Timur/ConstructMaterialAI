@@ -35,7 +35,7 @@ func (j *JSONB) Scan(value interface{}) error {
 
 type User struct {
 	ID           uint      `gorm:"primarykey;column:id"`
-	Email        string    `gorm:"uniqueIndex;not null;column:email"`
+	Email        string    `gorm:"unique;not null;column:email"`
 	PasswordHash string    `gorm:"not null;column:password_hash"`
 	CreatedAt    time.Time `gorm:"column:created_at;autoCreateTime"`
 	UpdatedAt    time.Time `gorm:"column:updated_at;autoUpdateTime"`
@@ -44,6 +44,7 @@ type User struct {
 type Project struct {
 	ID             uint            `gorm:"primarykey;column:id"`
 	UserID         uint            `gorm:"not null;index;column:user_id"`
+	TeamID         *uint           `gorm:"index;column:team_id"`
 	Name           string          `gorm:"not null;column:name"`
 	Description    string          `gorm:"column:description"`
 	EquipmentItems []EquipmentItem `gorm:"foreignKey:ProjectID"`
@@ -58,4 +59,21 @@ type EquipmentItem struct {
 	Parameters    JSONB     `gorm:"column:parameters;type:jsonb"`
 	WeightResult  *float64  `gorm:"column:weight_result"`
 	CreatedAt     time.Time `gorm:"column:created_at;autoCreateTime"`
+}
+
+// Team — команда для совместной работы над проектами
+type Team struct {
+	ID        uint         `gorm:"primarykey;column:id"`
+	Name      string       `gorm:"not null;column:name"`
+	OwnerID   uint         `gorm:"not null;index;column:owner_id"`
+	Members   []TeamMember `gorm:"foreignKey:TeamID"`
+	CreatedAt time.Time    `gorm:"column:created_at;autoCreateTime"`
+}
+
+// TeamMember — участник команды
+type TeamMember struct {
+	ID     uint   `gorm:"primarykey;column:id"`
+	TeamID uint   `gorm:"not null;uniqueIndex:idx_team_user;column:team_id"`
+	UserID uint   `gorm:"not null;uniqueIndex:idx_team_user;column:user_id"`
+	Role   string `gorm:"not null;default:'member';column:role"`
 }

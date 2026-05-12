@@ -20,6 +20,11 @@ func main() {
 	}
 	fmt.Println("Успешное подключение к базе данных")
 
+	if err := db.Migrate(); err != nil {
+		log.Fatal("Ошибка миграции БД: ", err)
+	}
+	fmt.Println("Миграция базы данных выполнена")
+
 	mux := http.NewServeMux()
 	httpapi.RegisterRoutes(mux)
 

@@ -15,12 +15,14 @@ const (
 	sheetConveyor   = "Конвейер"
 	sheetVessels    = "Вертикальные аппараты"
 	sheetDrums      = "Горизонтальные емкости"
+	sheetUTubes     = "Теплообменники"
+	sheetTower      = "Колонны"
 	sheetTitlePage  = "Титульный лист"
 	defaultSheetFix = "Sheet1" // excelize создаёт Sheet1 по умолчанию
 )
 
 // Порядок листов
-var sheetOrder = []string{sheetPumps, sheetConveyor, sheetVessels, sheetDrums}
+var sheetOrder = []string{sheetPumps, sheetConveyor, sheetVessels, sheetDrums, sheetUTubes, sheetTower}
 
 // Заголовки для каждого листа.
 // Флаг required — обязательна ли колонка.
@@ -71,6 +73,27 @@ var drumColumns = []colDef{
 	{"Вес (кг)", false},
 }
 
+var utubeColumns = []colDef{
+	{"Тэг", true},
+	{"Кол-во", true},
+	{"Диаметр кожуха (мм)", true},
+	{"Диам. труб (мм)", true},
+	{"Длина труб (мм)", true},
+	{"Давл. в трубах (МПа)", false},
+	{"Пл. теплообм. (м2)", false},
+	{"Вес (кг)", false},
+}
+
+var towerColumns = []colDef{
+	{"Тэг", true},
+	{"Кол-во", true},
+	{"Диаметр аппарата (м)", true},
+	{"Кол-во тарелок", true},
+	{"Длина (T/T, м)", false},
+	{"Давление (МПа)", false},
+	{"Вес (кг)", false},
+}
+
 func columnsForSheet(sheet string) []colDef {
 	switch sheet {
 	case sheetPumps:
@@ -81,6 +104,10 @@ func columnsForSheet(sheet string) []colDef {
 		return vesselColumns
 	case sheetDrums:
 		return drumColumns
+	case sheetUTubes:
+		return utubeColumns
+	case sheetTower:
+		return towerColumns
 	}
 	return nil
 }
@@ -97,7 +124,7 @@ func (e ImportError) String() string {
 	return fmt.Sprintf("Лист «%s», строка %d: в колонке «%s» %s", e.Sheet, e.Row, e.Column, e.Msg)
 }
 
-func createTitlePage(f *excelize.File) error {
+func createTitlePage(f *excelize.File, equipment []Equipment) error {
 	if err := f.SetSheetName(defaultSheetFix, sheetTitlePage); err != nil {
 		return fmt.Errorf("ошибка переименования листа: %w", err)
 	}
@@ -123,23 +150,84 @@ func createTitlePage(f *excelize.File) error {
 		return err
 	}
 
-	_ = f.SetCellValue(sheetTitlePage, "A1", "Опись оборудования проекта")
+	weightStyle, err := f.NewStyle(&excelize.Style{
+		Font: &excelize.Font{
+			Size: 14,
+		},
+		Alignment: &excelize.Alignment{
+			Horizontal: "right",
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	_ = f.SetCellValue(sheetTitlePage, "A1", "Единицы оборудования проекта")
 	_ = f.SetCellStyle(sheetTitlePage, "A1", "A1", titleStyle)
 
 	_ = f.SetColWidth(sheetTitlePage, "A", "A", 40)
+	_ = f.SetColWidth(sheetTitlePage, "B", "B", 20)
+	_ = f.SetColWidth(sheetTitlePage, "D", "D", 35)
+	_ = f.SetColWidth(sheetTitlePage, "E", "E", 20)
+
+	// Подсчет весов по типам
+	weightsByType := make(map[string]float64)
+	var totalWeight float64
+	for _, eq := range equipment {
+		w := eq.CalculatedWeight * float64(eq.Quantity)
+		totalWeight += w
+		var sName string
+		switch eq.Type {
+		case "Насосы":
+			sName = sheetPumps
+		case "Конвейер":
+			sName = sheetConveyor
+		case "Вертикальный аппарат":
+			sName = sheetVessels
+		case "Горизонтальная емкость":
+			sName = sheetDrums
+		case "Теплообменник":
+			sName = sheetUTubes
+		case "Колонна":
+			sName = sheetTower
+		}
+		if sName != "" {
+			weightsByType[sName] += w
+		}
+	}
 
 	startRow := 3
 	for i, sheet := range sheetOrder {
-		cell := fmt.Sprintf("A%d", startRow+i)
+		row := startRow + i
+		cellA := fmt.Sprintf("A%d", row)
+		cellB := fmt.Sprintf("B%d", row)
+
 		displayName := sheet
 		if sheet == sheetConveyor {
 			displayName = "Конвейеры"
 		}
-		_ = f.SetCellValue(sheetTitlePage, cell, displayName)
+		_ = f.SetCellValue(sheetTitlePage, cellA, displayName)
 
 		link := fmt.Sprintf("'%s'!A1", sheet)
-		_ = f.SetCellHyperLink(sheetTitlePage, cell, link, "Location")
-		_ = f.SetCellStyle(sheetTitlePage, cell, cell, linkStyle)
+		_ = f.SetCellHyperLink(sheetTitlePage, cellA, link, "Location")
+		_ = f.SetCellStyle(sheetTitlePage, cellA, cellA, linkStyle)
+
+		if len(equipment) > 0 {
+			w := weightsByType[sheet]
+			_ = f.SetCellValue(sheetTitlePage, cellB, w)
+			_ = f.SetCellStyle(sheetTitlePage, cellB, cellB, weightStyle)
+		}
+	}
+
+	if len(equipment) > 0 {
+		cellLabel := "D3"
+		cellVal := "E3"
+
+		_ = f.SetCellValue(sheetTitlePage, cellLabel, "Итоговый вес проекта (кг)")
+		_ = f.SetCellValue(sheetTitlePage, cellVal, totalWeight)
+
+		_ = f.SetCellStyle(sheetTitlePage, cellLabel, cellLabel, titleStyle)
+		_ = f.SetCellStyle(sheetTitlePage, cellVal, cellVal, titleStyle)
 	}
 
 	return nil
@@ -173,7 +261,7 @@ func generateTemplate(filePath string) error {
 		return fmt.Errorf("ошибка создания стиля: %w", err)
 	}
 
-	if err := createTitlePage(f); err != nil {
+	if err := createTitlePage(f, nil); err != nil {
 		return err
 	}
 
@@ -219,7 +307,7 @@ func exportProject(filePath string, equipment []Equipment) error {
 		return fmt.Errorf("ошибка создания стиля: %w", err)
 	}
 
-	if err := createTitlePage(f); err != nil {
+	if err := createTitlePage(f, equipment); err != nil {
 		return err
 	}
 
@@ -247,6 +335,8 @@ func exportProject(filePath string, equipment []Equipment) error {
 		sheetConveyor: 2,
 		sheetVessels:  2,
 		sheetDrums:    2,
+		sheetUTubes:   2,
+		sheetTower:    2,
 	}
 
 	for _, eq := range equipment {
@@ -260,6 +350,10 @@ func exportProject(filePath string, equipment []Equipment) error {
 			sheet = sheetVessels
 		case "Горизонтальная емкость":
 			sheet = sheetDrums
+		case "Теплообменник":
+			sheet = sheetUTubes
+		case "Колонна":
+			sheet = sheetTower
 		default:
 			continue
 		}
@@ -306,6 +400,25 @@ func exportProject(filePath string, equipment []Equipment) error {
 			setCellOptFloat(f, sheet, 4, row, eq.DesignTangentToTangentLength)
 			setCellOptFloat(f, sheet, 5, row, eq.DesignGaugePressure)
 			setCellOptFloat(f, sheet, 6, row, eq.DesignTemperature)
+			if eq.CalculatedWeight > 0 {
+				setCell(f, sheet, 7, row, eq.CalculatedWeight)
+			}
+
+		case "Теплообменник":
+			setCellOptFloat(f, sheet, 3, row, eq.ShellDiameter)
+			setCellOptFloat(f, sheet, 4, row, eq.TubeOutDiameter)
+			setCellOptFloat(f, sheet, 5, row, eq.TubeLen)
+			setCellOptFloat(f, sheet, 6, row, eq.TubeDesPres)
+			setCellOptFloat(f, sheet, 7, row, eq.HeatArea)
+			if eq.CalculatedWeight > 0 {
+				setCell(f, sheet, 8, row, eq.CalculatedWeight)
+			}
+			
+		case "Колонна":
+			setCellOptFloat(f, sheet, 3, row, eq.VesselDiameter)
+			setCellOptFloat(f, sheet, 4, row, eq.NumberOfTrays)
+			setCellOptFloat(f, sheet, 5, row, eq.DesignTangentToTangentLength)
+			setCellOptFloat(f, sheet, 6, row, eq.DesignGaugePressure)
 			if eq.CalculatedWeight > 0 {
 				setCell(f, sheet, 7, row, eq.CalculatedWeight)
 			}
@@ -405,6 +518,11 @@ func importProject(filePath string) ([]Equipment, []ImportError) {
 				eq.SpecGravity, hasError = parseImportFloat(cells, 5, cols, sheet, excelRow, false, &errors, hasError)
 				// Мощность (G, опциональный)
 				eq.PowerKW, hasError = parseImportFloat(cells, 6, cols, sheet, excelRow, false, &errors, hasError)
+				// Вес (H, опциональный)
+				weight, _ := parseImportFloat(cells, 7, cols, sheet, excelRow, false, &errors, hasError)
+				if weight != nil {
+					eq.CalculatedWeight = *weight
+				}
 
 			case sheetConveyor:
 				eq.Type = "Конвейер"
@@ -414,6 +532,11 @@ func importProject(filePath string) ([]Equipment, []ImportError) {
 				eq.BeltWidth, hasError = parseImportFloat(cells, 3, cols, sheet, excelRow, true, &errors, hasError)
 				// Производительность (E, опциональный)
 				eq.ConveyorFlowRate, hasError = parseImportFloat(cells, 4, cols, sheet, excelRow, false, &errors, hasError)
+				// Вес (F, опциональный)
+				weight, _ := parseImportFloat(cells, 5, cols, sheet, excelRow, false, &errors, hasError)
+				if weight != nil {
+					eq.CalculatedWeight = *weight
+				}
 
 			case sheetVessels:
 				eq.Type = "Вертикальный аппарат"
@@ -429,6 +552,11 @@ func importProject(filePath string) ([]Equipment, []ImportError) {
 				eq.SkirtHeight, hasError = parseImportFloat(cells, 6, cols, sheet, excelRow, false, &errors, hasError)
 				// Высота опор (H, опциональный)
 				eq.VesselLegHeight, hasError = parseImportFloat(cells, 7, cols, sheet, excelRow, false, &errors, hasError)
+				// Вес (I, опциональный)
+				weight, _ := parseImportFloat(cells, 8, cols, sheet, excelRow, false, &errors, hasError)
+				if weight != nil {
+					eq.CalculatedWeight = *weight
+				}
 
 				if eq.SkirtHeight != nil && eq.VesselLegHeight != nil {
 					errors = append(errors, ImportError{
@@ -450,6 +578,40 @@ func importProject(filePath string) ([]Equipment, []ImportError) {
 				eq.DesignGaugePressure, hasError = parseImportFloat(cells, 4, cols, sheet, excelRow, false, &errors, hasError)
 				// Температура (F, опциональный)
 				eq.DesignTemperature, hasError = parseImportFloat(cells, 5, cols, sheet, excelRow, false, &errors, hasError)
+				// Вес (G, опциональный)
+				weight, _ := parseImportFloat(cells, 6, cols, sheet, excelRow, false, &errors, hasError)
+				if weight != nil {
+					eq.CalculatedWeight = *weight
+				}
+
+			case sheetUTubes:
+				eq.Type = "Теплообменник"
+				// Диаметр кожуха (C, обязательный)
+				eq.ShellDiameter, hasError = parseImportFloat(cells, 2, cols, sheet, excelRow, true, &errors, hasError)
+				// Диам. труб (D, обязательный)
+				eq.TubeOutDiameter, hasError = parseImportFloat(cells, 3, cols, sheet, excelRow, true, &errors, hasError)
+				// Длина труб (E, обязательный)
+				eq.TubeLen, hasError = parseImportFloat(cells, 4, cols, sheet, excelRow, true, &errors, hasError)
+				// Давление в трубах (F, опциональный)
+				eq.TubeDesPres, hasError = parseImportFloat(cells, 5, cols, sheet, excelRow, false, &errors, hasError)
+				// Пл. теплообм. (G, опциональный)
+				eq.HeatArea, hasError = parseImportFloat(cells, 6, cols, sheet, excelRow, false, &errors, hasError)
+				// Вес (H, опциональный)
+				weight, _ := parseImportFloat(cells, 7, cols, sheet, excelRow, false, &errors, hasError)
+				if weight != nil {
+					eq.CalculatedWeight = *weight
+				}
+
+			case sheetTower:
+				eq.Type = "Колонна"
+				eq.VesselDiameter, hasError = parseImportFloat(cells, 2, cols, sheet, excelRow, true, &errors, hasError)
+				eq.NumberOfTrays, hasError = parseImportFloat(cells, 3, cols, sheet, excelRow, true, &errors, hasError)
+				eq.DesignTangentToTangentLength, hasError = parseImportFloat(cells, 4, cols, sheet, excelRow, false, &errors, hasError)
+				eq.DesignGaugePressure, hasError = parseImportFloat(cells, 5, cols, sheet, excelRow, false, &errors, hasError)
+				weight, _ := parseImportFloat(cells, 6, cols, sheet, excelRow, false, &errors, hasError)
+				if weight != nil {
+					eq.CalculatedWeight = *weight
+				}
 			}
 
 			if !hasError {
