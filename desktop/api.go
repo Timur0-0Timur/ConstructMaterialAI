@@ -323,7 +323,7 @@ func sendEquipmentToBackend(eq Equipment) (float64, error) {
 		}
 		return sendDrumToBackend(req)
 
-	case "Теплообменник":
+	case "Трубчатый теплообменник":
 		req := UTubeRequest{
 			Tag:             eq.Tag,
 			ShellDiameter:   eq.ShellDiameter,
@@ -334,7 +334,7 @@ func sendEquipmentToBackend(eq Equipment) (float64, error) {
 		}
 		return sendUTubeToBackend(req)
 
-	case "Колонна":
+	case "Тарельчатая колонна":
 		req := TowerRequest{
 			Tag:                          eq.Tag,
 			VesselDiameter:               eq.VesselDiameter,

@@ -301,7 +301,7 @@ func (r *equipmentRow) collectEquipment() (Equipment, error) {
 			r.markFieldInvalid(r.designTemperatureEntry, r.designTemperatureLabel, true)
 		}
 
-	case "Колонна":
+	case "Тарельчатая колонна":
 		vesselDiameter, err := parseOptionalFloat(r.vesselDiameterEntry.Text)
 		if err != nil || vesselDiameter == nil {
 			r.markFieldInvalid(r.vesselDiameterEntry, r.vesselDiameterLabel, true)
@@ -325,7 +325,7 @@ func (r *equipmentRow) collectEquipment() (Equipment, error) {
 			r.markFieldInvalid(r.designGaugePressureEntry, r.designGaugePressureLabel, true)
 		}
 
-	case "Теплообменник":
+	case "Трубчатый теплообменник":
 		shellDiameter, err := parseOptionalFloat(r.shellDiameterEntry.Text)
 		if err != nil || shellDiameter == nil {
 			r.markFieldInvalid(r.shellDiameterEntry, r.shellDiameterLabel, true)

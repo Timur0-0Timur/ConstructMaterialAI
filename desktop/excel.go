@@ -15,8 +15,8 @@ const (
 	sheetConveyor   = "Конвейер"
 	sheetVessels    = "Вертикальные аппараты"
 	sheetDrums      = "Горизонтальные емкости"
-	sheetUTubes     = "Теплообменники"
-	sheetTower      = "Колонны"
+	sheetUTubes     = "Трубчатые теплообменники"
+	sheetTower      = "Тарельчатые колонны"
 	sheetTitlePage  = "Титульный лист"
 	defaultSheetFix = "Sheet1" // excelize создаёт Sheet1 по умолчанию
 )
@@ -186,9 +186,9 @@ func createTitlePage(f *excelize.File, equipment []Equipment) error {
 			sName = sheetVessels
 		case "Горизонтальная емкость":
 			sName = sheetDrums
-		case "Теплообменник":
+		case "Трубчатый теплообменник":
 			sName = sheetUTubes
-		case "Колонна":
+		case "Тарельчатая колонна":
 			sName = sheetTower
 		}
 		if sName != "" {
@@ -350,9 +350,9 @@ func exportProject(filePath string, equipment []Equipment) error {
 			sheet = sheetVessels
 		case "Горизонтальная емкость":
 			sheet = sheetDrums
-		case "Теплообменник":
+		case "Трубчатый теплообменник":
 			sheet = sheetUTubes
-		case "Колонна":
+		case "Тарельчатая колонна":
 			sheet = sheetTower
 		default:
 			continue
@@ -585,7 +585,7 @@ func importProject(filePath string) ([]Equipment, []ImportError) {
 				}
 
 			case sheetUTubes:
-				eq.Type = "Теплообменник"
+				eq.Type = "Трубчатый теплообменник"
 				// Диаметр кожуха (C, обязательный)
 				eq.ShellDiameter, hasError = parseImportFloat(cells, 2, cols, sheet, excelRow, true, &errors, hasError)
 				// Диам. труб (D, обязательный)
@@ -603,7 +603,7 @@ func importProject(filePath string) ([]Equipment, []ImportError) {
 				}
 
 			case sheetTower:
-				eq.Type = "Колонна"
+				eq.Type = "Тарельчатая колонна"
 				eq.VesselDiameter, hasError = parseImportFloat(cells, 2, cols, sheet, excelRow, true, &errors, hasError)
 				eq.NumberOfTrays, hasError = parseImportFloat(cells, 3, cols, sheet, excelRow, true, &errors, hasError)
 				eq.DesignTangentToTangentLength, hasError = parseImportFloat(cells, 4, cols, sheet, excelRow, false, &errors, hasError)
