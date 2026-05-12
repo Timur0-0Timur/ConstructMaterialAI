@@ -581,34 +581,35 @@ func showProject(w fyne.Window, projectName string) {
 	byTypeLabel := widget.NewLabel("По типам: —")
 
 	recalcAll := func() {
-		var grandTotal float64
-		typeWeights := make(map[string]float64)
+		// Выполняем всё в основном потоке, чтобы безопасно читать из виджетов и обновлять UI.
+		// Использование fyne.Do вместо DoAndWait предотвращает взаимоблокировку при вызове из главного потока.
+		fyne.Do(func() {
+			var grandTotal float64
+			typeWeights := make(map[string]float64)
 
-		// Чтение данных из виджетов должно происходить в основном потоке
-		fyne.DoAndWait(func() {
 			for _, r := range rows {
-				eq, err := r.collectEquipment()
-				if err != nil {
-					continue
+				qty, _ := strconv.Atoi(strings.TrimSpace(r.qtyEntry.Text))
+				if qty < 1 {
+					qty = 1
 				}
+				eqType := r.typeSelect.Selected
 
 				var unitWeight float64
 				text := r.resultLabel.Text
 				if strings.HasSuffix(text, " кг/ед.") {
 					text = strings.TrimSuffix(text, " кг/ед.")
 					text = strings.TrimPrefix(text, "✓ ")
+					text = strings.TrimSpace(text)
 					unitWeight, _ = strconv.ParseFloat(text, 64)
 				}
 
-				lineTotal := unitWeight * float64(eq.Quantity)
+				lineTotal := unitWeight * float64(qty)
 				grandTotal += lineTotal
 				if unitWeight > 0 {
-					typeWeights[eq.Type] += lineTotal
+					typeWeights[eqType] += lineTotal
 				}
 			}
-		})
 
-		fyne.Do(func() {
 			totalWeightLabel.SetText(fmt.Sprintf("%.2f кг", grandTotal))
 
 			var parts []string
@@ -654,7 +655,7 @@ func showProject(w fyne.Window, projectName string) {
 	}
 
 	addEquipmentRow := func(eq Equipment) {
-		row := &equipmentRow{}
+		row := &equipmentRow{loading: true}
 
 		row.typeSelect = widget.NewSelect(equipmentTypes, nil)
 		if eq.Type != "" {
@@ -668,6 +669,7 @@ func showProject(w fyne.Window, projectName string) {
 		row.tagEntry.SetText(eq.Tag)
 		row.tagEntry.OnChanged = func(s string) {
 			row.markFieldInvalid(row.tagEntry, nil, strings.TrimSpace(s) == "")
+			row.dataChanged(false)
 		}
 		tagContainer := container.NewGridWrap(fyne.NewSize(150, 40), row.tagEntry)
 
@@ -681,6 +683,7 @@ func showProject(w fyne.Window, projectName string) {
 		row.qtyEntry.OnChanged = func(s string) {
 			q, err := strconv.Atoi(strings.TrimSpace(s))
 			row.markFieldInvalid(row.qtyEntry, nil, err != nil || q < 1)
+			row.dataChanged(false)
 		}
 
 		row.resultLabel = widget.NewLabel("—")
@@ -765,8 +768,7 @@ func showProject(w fyne.Window, projectName string) {
 			row.fieldsContainer.Show()
 			row.expandBtn.SetIcon(theme.MenuDropUpIcon())
 			row.fieldsContainer.Refresh()
-			row.resultLabel.SetText("—")
-			recalcAll()
+			row.dataChanged(true)
 		}
 
 		row.expandBtn = widget.NewButtonWithIcon("", theme.MenuDropUpIcon(), func() {
@@ -833,11 +835,16 @@ func showProject(w fyne.Window, projectName string) {
 		rows = append(rows, row)
 		rowsContainer.Add(row.container)
 		rowsContainer.Refresh()
+
+		row.loading = false
+		// Устанавливаем callback после инициализации полей, чтобы не сбрасывать вес при загрузке
+		row.OnChanged = recalcAll
 	}
 
 	for _, eq := range appData.Projects[projIdx].Equipment {
 		addEquipmentRow(eq)
 	}
+	recalcAll()
 
 	addBtn := widget.NewButtonWithIcon("Добавить единицу оборудования", theme.ContentAddIcon(), func() {
 		addEquipmentRow(Equipment{})
@@ -881,6 +888,7 @@ func showProject(w fyne.Window, projectName string) {
 
 	saveBtn := widget.NewButtonWithIcon("Сохранить проект", theme.DocumentSaveIcon(), func() {
 		var equipment []Equipment
+		hasUncalculated := false
 		for _, r := range rows {
 			eq, err := r.collectEquipment()
 			if err != nil {
@@ -889,16 +897,93 @@ func showProject(w fyne.Window, projectName string) {
 			text := r.resultLabel.Text
 			if strings.HasSuffix(text, " кг/ед.") {
 				text = strings.TrimSuffix(text, " кг/ед.")
+				text = strings.TrimPrefix(text, "✓ ")
 				eq.CalculatedWeight, _ = strconv.ParseFloat(text, 64)
+			} else {
+				hasUncalculated = true
 			}
 			equipment = append(equipment, eq)
 		}
-		appData.Projects[projIdx].Equipment = equipment
-		if err := saveProjects(appData); err != nil {
-			dialog.ShowError(err, w)
-			return
+
+		doLocalSave := func(eqList []Equipment) {
+			appData.Projects[projIdx].Equipment = eqList
+			appData.Projects[projIdx].UpdatedAt = time.Now()
+			if err := saveProjects(appData); err != nil {
+				dialog.ShowError(err, w)
+				return
+			}
+			dialog.ShowInformation("Сохранено", "Проект успешно сохранён.", w)
 		}
-		dialog.ShowInformation("Сохранено", "Проект успешно сохранён.", w)
+
+		if hasUncalculated {
+			continueBtn := widget.NewButton("Всё равно сохранить", func() {
+				doLocalSave(equipment)
+			})
+			var warningDialog dialog.Dialog
+			calcAndSaveBtn := widget.NewButton("Рассчитать и сохранить", func() {
+				if warningDialog != nil {
+					warningDialog.Hide()
+				}
+				fyne.Do(func() {
+					totalWeightLabel.SetText("⏳ Расчёт...")
+				})
+				go func() {
+					for _, r := range rows {
+						var eq Equipment
+						var err error
+						fyne.DoAndWait(func() {
+							eq, err = r.collectEquipment()
+							if err == nil {
+								r.resultLabel.SetText("⏳...")
+								r.resultLabel.Refresh()
+							}
+						})
+						if err != nil {
+							continue
+						}
+
+						weight, err := sendEquipmentToBackend(eq)
+						fyne.Do(func() {
+							if err != nil {
+								r.resultLabel.SetText("✗ " + err.Error())
+							} else {
+								r.resultLabel.SetText(fmt.Sprintf("✓ %.2f кг/ед.", weight))
+							}
+							r.resultLabel.Refresh()
+						})
+					}
+					recalcAll()
+
+					// Собираем заново после расчета
+					var updatedEquipment []Equipment
+					for _, r := range rows {
+						eq, _ := r.collectEquipment()
+						text := r.resultLabel.Text
+						if strings.HasSuffix(text, " кг/ед.") {
+							text = strings.TrimSuffix(text, " кг/ед.")
+							text = strings.TrimPrefix(text, "✓ ")
+							eq.CalculatedWeight, _ = strconv.ParseFloat(text, 64)
+						}
+						updatedEquipment = append(updatedEquipment, eq)
+					}
+					doLocalSave(updatedEquipment)
+				}()
+			})
+			calcAndSaveBtn.Importance = widget.HighImportance
+
+			warningContent := container.NewVBox(
+				widget.NewLabel("Не у всех строк рассчитан вес.\nСохранить проект без этих данных?"),
+				container.NewHBox(continueBtn, calcAndSaveBtn),
+			)
+			warningDialog = dialog.NewCustomWithoutButtons("Предупреждение", warningContent, w)
+			continueBtn.OnTapped = func() {
+				warningDialog.Hide()
+				doLocalSave(equipment)
+			}
+			warningDialog.Show()
+		} else {
+			doLocalSave(equipment)
+		}
 	})
 
 	backBtn := widget.NewButtonWithIcon("Назад к проектам", theme.NavigateBackIcon(), func() {
@@ -1006,6 +1091,7 @@ func showProject(w fyne.Window, projectName string) {
 			for _, eq := range imported {
 				addEquipmentRow(eq)
 			}
+			recalcAll()
 
 			// Показываем отчёт
 			if len(importErrors) > 0 {
@@ -1241,46 +1327,128 @@ func showProject(w fyne.Window, projectName string) {
 	// Кнопка «Сохранить в облако» — только для авторизованных пользователей
 	if currentAuth.IsLoggedIn() {
 		cloudSaveBtn := widget.NewButtonWithIcon("Сохранить в облако", theme.UploadIcon(), func() {
-			// Собираем текущий проект из строк UI
-			currentProject := appData.Projects[projIdx]
-			currentProject.Equipment = []Equipment{}
-			for _, row := range rows {
-				eq, err := row.collectEquipment()
-				if err == nil {
-					currentProject.Equipment = append(currentProject.Equipment, eq)
+			var equipment []Equipment
+			hasUncalculated := false
+			for _, r := range rows {
+				eq, err := r.collectEquipment()
+				if err != nil {
+					continue
 				}
+				text := r.resultLabel.Text
+				if strings.HasSuffix(text, " кг/ед.") {
+					text = strings.TrimSuffix(text, " кг/ед.")
+					text = strings.TrimPrefix(text, "✓ ")
+					eq.CalculatedWeight, _ = strconv.ParseFloat(text, 64)
+				} else {
+					hasUncalculated = true
+				}
+				equipment = append(equipment, eq)
 			}
-			token := currentAuth.GetToken()
-			go func() {
-				cloudID, err := saveProjectToCloud(currentProject, token)
-				fyne.Do(func() {
-					if err != nil {
-						if err.Error() == "CONFLICT_VERSION" {
-							dialog.ShowConfirm("Конфликт версий", 
-								"Проект был изменён другим участником команды.\nПерезаписать текущей версией?", 
-								func(ok bool) {
-									if ok {
-										// Для перезаписи нужно обновить UpdatedAt локально, чтобы бэкенд пропустил?
-										// В реальном приложении нужно заново запросить проект,
-										// но здесь просто предупреждаем, что сохранение не прошло.
-										dialog.ShowInformation("Конфликт", "Для перезаписи обновите проект и повторите.", w)
-									}
-								}, w)
+
+			doCloudSave := func(eqList []Equipment) {
+				// Обновляем локальное состояние перед отправкой в облако
+				appData.Projects[projIdx].Equipment = eqList
+				appData.Projects[projIdx].UpdatedAt = time.Now()
+				
+				currentProject := appData.Projects[projIdx]
+				token := currentAuth.GetToken()
+				go func() {
+					cloudID, err := saveProjectToCloud(currentProject, token)
+					fyne.Do(func() {
+						if err != nil {
+							if err.Error() == "CONFLICT_VERSION" {
+								dialog.ShowConfirm("Конфликт версий",
+									"Проект был изменён другим участником команды.\nПерезаписать текущей версией?",
+									func(ok bool) {
+										if ok {
+											dialog.ShowInformation("Конфликт", "Для перезаписи обновите проект и повторите.", w)
+										}
+									}, w)
+							} else {
+								dialog.ShowError(fmt.Errorf("Ошибка облачного сохранения: %w", err), w)
+							}
 						} else {
-							dialog.ShowError(fmt.Errorf("Ошибка облачного сохранения: %w", err), w)
-						}
-					} else {
-						// Обновляем CloudID локально
-						if cloudID > 0 && currentProject.CloudID == 0 {
-							appData.Projects[projIdx].CloudID = cloudID
+							// Сохраняем локально, чтобы зафиксировать изменения и CloudID
+							if cloudID > 0 {
+								appData.Projects[projIdx].CloudID = cloudID
+							}
 							_ = saveProjects(appData)
+							
+							dialog.ShowInformation("Облако", "Проект успешно сохранён в облако!", w)
+							w.Content().Refresh()
 						}
-						dialog.ShowInformation("Облако", "Проект успешно сохранён в облако!", w)
-						// Обновляем UI, если нужно
-						w.Content().Refresh()
-					}
+					})
+				}()
+			}
+
+			if hasUncalculated {
+				continueBtn := widget.NewButton("Всё равно сохранить", func() {
+					doCloudSave(equipment)
 				})
-			}()
+				var warningDialog dialog.Dialog
+				calcAndSaveBtn := widget.NewButton("Рассчитать и сохранить", func() {
+					if warningDialog != nil {
+						warningDialog.Hide()
+					}
+					fyne.Do(func() {
+						totalWeightLabel.SetText("⏳ Расчёт...")
+					})
+					go func() {
+						for _, r := range rows {
+							var eq Equipment
+							var err error
+							fyne.DoAndWait(func() {
+								eq, err = r.collectEquipment()
+								if err == nil {
+									r.resultLabel.SetText("⏳...")
+									r.resultLabel.Refresh()
+								}
+							})
+							if err != nil {
+								continue
+							}
+
+							weight, err := sendEquipmentToBackend(eq)
+							fyne.Do(func() {
+								if err != nil {
+									r.resultLabel.SetText("✗ " + err.Error())
+								} else {
+									r.resultLabel.SetText(fmt.Sprintf("✓ %.2f кг/ед.", weight))
+								}
+								r.resultLabel.Refresh()
+							})
+						}
+						recalcAll()
+
+						var updatedEquipment []Equipment
+						for _, r := range rows {
+							eq, _ := r.collectEquipment()
+							text := r.resultLabel.Text
+							if strings.HasSuffix(text, " кг/ед.") {
+								text = strings.TrimSuffix(text, " кг/ед.")
+								text = strings.TrimPrefix(text, "✓ ")
+								eq.CalculatedWeight, _ = strconv.ParseFloat(text, 64)
+							}
+							updatedEquipment = append(updatedEquipment, eq)
+						}
+						doCloudSave(updatedEquipment)
+					}()
+				})
+				calcAndSaveBtn.Importance = widget.HighImportance
+
+				warningContent := container.NewVBox(
+					widget.NewLabel("Не у всех строк рассчитан вес.\nСохранить в облако без этих данных?"),
+					container.NewHBox(continueBtn, calcAndSaveBtn),
+				)
+				warningDialog = dialog.NewCustomWithoutButtons("Предупреждение", warningContent, w)
+				continueBtn.OnTapped = func() {
+					warningDialog.Hide()
+					doCloudSave(equipment)
+				}
+				warningDialog.Show()
+			} else {
+				doCloudSave(equipment)
+			}
 		})
 		bottomButtons.Add(cloudSaveBtn)
 

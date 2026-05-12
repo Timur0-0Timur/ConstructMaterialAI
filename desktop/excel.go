@@ -405,6 +405,11 @@ func importProject(filePath string) ([]Equipment, []ImportError) {
 				eq.SpecGravity, hasError = parseImportFloat(cells, 5, cols, sheet, excelRow, false, &errors, hasError)
 				// Мощность (G, опциональный)
 				eq.PowerKW, hasError = parseImportFloat(cells, 6, cols, sheet, excelRow, false, &errors, hasError)
+				// Вес (H, опциональный)
+				weight, _ := parseImportFloat(cells, 7, cols, sheet, excelRow, false, &errors, hasError)
+				if weight != nil {
+					eq.CalculatedWeight = *weight
+				}
 
 			case sheetConveyor:
 				eq.Type = "Конвейер"
@@ -414,6 +419,11 @@ func importProject(filePath string) ([]Equipment, []ImportError) {
 				eq.BeltWidth, hasError = parseImportFloat(cells, 3, cols, sheet, excelRow, true, &errors, hasError)
 				// Производительность (E, опциональный)
 				eq.ConveyorFlowRate, hasError = parseImportFloat(cells, 4, cols, sheet, excelRow, false, &errors, hasError)
+				// Вес (F, опциональный)
+				weight, _ := parseImportFloat(cells, 5, cols, sheet, excelRow, false, &errors, hasError)
+				if weight != nil {
+					eq.CalculatedWeight = *weight
+				}
 
 			case sheetVessels:
 				eq.Type = "Вертикальный аппарат"
@@ -429,6 +439,11 @@ func importProject(filePath string) ([]Equipment, []ImportError) {
 				eq.SkirtHeight, hasError = parseImportFloat(cells, 6, cols, sheet, excelRow, false, &errors, hasError)
 				// Высота опор (H, опциональный)
 				eq.VesselLegHeight, hasError = parseImportFloat(cells, 7, cols, sheet, excelRow, false, &errors, hasError)
+				// Вес (I, опциональный)
+				weight, _ := parseImportFloat(cells, 8, cols, sheet, excelRow, false, &errors, hasError)
+				if weight != nil {
+					eq.CalculatedWeight = *weight
+				}
 
 				if eq.SkirtHeight != nil && eq.VesselLegHeight != nil {
 					errors = append(errors, ImportError{
@@ -450,6 +465,11 @@ func importProject(filePath string) ([]Equipment, []ImportError) {
 				eq.DesignGaugePressure, hasError = parseImportFloat(cells, 4, cols, sheet, excelRow, false, &errors, hasError)
 				// Температура (F, опциональный)
 				eq.DesignTemperature, hasError = parseImportFloat(cells, 5, cols, sheet, excelRow, false, &errors, hasError)
+				// Вес (G, опциональный)
+				weight, _ := parseImportFloat(cells, 6, cols, sheet, excelRow, false, &errors, hasError)
+				if weight != nil {
+					eq.CalculatedWeight = *weight
+				}
 			}
 
 			if !hasError {
