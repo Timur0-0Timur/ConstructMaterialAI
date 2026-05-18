@@ -36,6 +36,10 @@ type Equipment struct {
 	TubeDesPres     *float64 `json:"tube_des_pres,omitempty"`
 	HeatArea        *float64 `json:"heat_area,omitempty"`
 
+	// Коробчатая технологическая печь (Box Furnace)
+	Duty                *float64 `json:"duty,omitempty"`
+	StandardGasFlowRate *float64 `json:"standard_gas_flow_rate,omitempty"`
+
 	CalculatedWeight float64 `json:"calculated_weight"`
 }
 

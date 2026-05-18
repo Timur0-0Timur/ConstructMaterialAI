@@ -16,6 +16,7 @@ func RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/conveyor/estimate", ConveyorHandler)
 	mux.HandleFunc("/utube/estimate", UTubeHandler)
 	mux.HandleFunc("/tower/estimate", TowerHandler)
+	mux.HandleFunc("/box_furnace/estimate", BoxFurnaceHandler)
 
 	// Авторизация
 	mux.HandleFunc("/api/auth/register", RegisterHandler)

@@ -86,6 +86,11 @@ type equipmentRow struct {
 	heatAreaLabel        *canvas.Text
 	heatAreaEntry        *widget.Entry
 
+	dutyLabel                *canvas.Text
+	dutyEntry                *widget.Entry
+	standardGasFlowRateLabel *canvas.Text
+	standardGasFlowRateEntry *widget.Entry
+
 	fieldsContainer *fyne.Container
 	resultLabel     *widget.Label
 	expandBtn       *widget.Button
@@ -147,6 +152,7 @@ func (r *equipmentRow) refreshTheme() {
 		r.designTangentToTangentLengthLabel, r.numberOfTraysLabel,
 		r.shellDiameterLabel, r.tubeOutDiameterLabel, r.tubeLenLabel,
 		r.tubeDesPresLabel, r.heatAreaLabel,
+		r.dutyLabel, r.standardGasFlowRateLabel,
 	}
 	for _, l := range labels {
 		if l != nil {
@@ -323,6 +329,30 @@ func (r *equipmentRow) collectEquipment() (Equipment, error) {
 		eq.DesignGaugePressure, err = parseOptionalFloat(r.designGaugePressureEntry.Text)
 		if err != nil {
 			r.markFieldInvalid(r.designGaugePressureEntry, r.designGaugePressureLabel, true)
+		}
+
+	case "Коробчатая технологическая печь":
+		duty, err := parseOptionalFloat(r.dutyEntry.Text)
+		if err != nil || duty == nil {
+			r.markFieldInvalid(r.dutyEntry, r.dutyLabel, true)
+			return eq, fmt.Errorf("Тепловая мощность обязательна")
+		}
+		eq.Duty = duty
+
+		gasFlow, err := parseOptionalFloat(r.standardGasFlowRateEntry.Text)
+		if err != nil || gasFlow == nil {
+			r.markFieldInvalid(r.standardGasFlowRateEntry, r.standardGasFlowRateLabel, true)
+			return eq, fmt.Errorf("Расход сырья обязателен")
+		}
+		eq.StandardGasFlowRate = gasFlow
+
+		eq.DesignGaugePressure, err = parseOptionalFloat(r.designGaugePressureEntry.Text)
+		if err != nil {
+			r.markFieldInvalid(r.designGaugePressureEntry, r.designGaugePressureLabel, true)
+		}
+		eq.DesignTemperature, err = parseOptionalFloat(r.designTemperatureEntry.Text)
+		if err != nil {
+			r.markFieldInvalid(r.designTemperatureEntry, r.designTemperatureLabel, true)
 		}
 
 	case "Трубчатый теплообменник":
@@ -504,6 +534,7 @@ func (r *equipmentRow) clearValidation() {
 		r.numberOfTraysEntry,
 		r.shellDiameterEntry, r.tubeOutDiameterEntry, r.tubeLenEntry,
 		r.tubeDesPresEntry, r.heatAreaEntry,
+		r.dutyEntry, r.standardGasFlowRateEntry,
 	}
 	for _, e := range entries {
 		if e != nil {
@@ -532,6 +563,8 @@ func (r *equipmentRow) clearValidation() {
 	setLabelError(r.tubeLenLabel, false)
 	setLabelError(r.tubeDesPresLabel, false)
 	setLabelError(r.heatAreaLabel, false)
+	setLabelError(r.dutyLabel, false)
+	setLabelError(r.standardGasFlowRateLabel, false)
 }
 func buildPumpFields(row *equipmentRow) *fyne.Container {
 	flowLabel, flowObj := createLabel("Расход (м³/ч):", true)
@@ -857,5 +890,54 @@ func buildTowerFields(row *equipmentRow) *fyne.Container {
 		numberOfTraysObj, row.numberOfTraysEntry,
 		designTangentToTangentLengthObj, row.designTangentToTangentLengthEntry,
 		designGaugePressureObj, row.designGaugePressureEntry,
+	)
+}
+
+func buildBoxFurnaceFields(row *equipmentRow) *fyne.Container {
+	dutyLabel, dutyObj := createLabel("Тепловая мощность (МВт):", true)
+	row.dutyLabel = dutyLabel
+	row.dutyEntry = widget.NewEntry()
+	row.dutyEntry.SetPlaceHolder("Введите мощность (обязательно)")
+	row.dutyEntry.OnChanged = func(s string) {
+		val, err := parseOptionalFloat(s)
+		row.markFieldInvalid(row.dutyEntry, row.dutyLabel, err != nil || val == nil)
+		row.dataChanged(true)
+	}
+
+	standardGasFlowRateLabel, standardGasFlowRateObj := createLabel("Расход сырья (л/с):", true)
+	row.standardGasFlowRateLabel = standardGasFlowRateLabel
+	row.standardGasFlowRateEntry = widget.NewEntry()
+	row.standardGasFlowRateEntry.SetPlaceHolder("Введите расход (обязательно)")
+	row.standardGasFlowRateEntry.OnChanged = func(s string) {
+		val, err := parseOptionalFloat(s)
+		row.markFieldInvalid(row.standardGasFlowRateEntry, row.standardGasFlowRateLabel, err != nil || val == nil)
+		row.dataChanged(true)
+	}
+
+	designGaugePressureLabel, designGaugePressureObj := createLabel("Давление змеевика (кПа):", false)
+	row.designGaugePressureLabel = designGaugePressureLabel
+	row.designGaugePressureEntry = widget.NewEntry()
+	row.designGaugePressureEntry.SetPlaceHolder("Давление")
+	row.designGaugePressureEntry.OnChanged = func(s string) {
+		_, err := parseOptionalFloat(s)
+		row.markFieldInvalid(row.designGaugePressureEntry, row.designGaugePressureLabel, err != nil)
+		row.dataChanged(true)
+	}
+
+	designTemperatureLabel, designTemperatureObj := createLabel("Расч. температура (°C):", false)
+	row.designTemperatureLabel = designTemperatureLabel
+	row.designTemperatureEntry = widget.NewEntry()
+	row.designTemperatureEntry.SetPlaceHolder("Температура")
+	row.designTemperatureEntry.OnChanged = func(s string) {
+		_, err := parseOptionalFloat(s)
+		row.markFieldInvalid(row.designTemperatureEntry, row.designTemperatureLabel, err != nil)
+		row.dataChanged(true)
+	}
+
+	return container.New(layout.NewFormLayout(),
+		dutyObj, row.dutyEntry,
+		standardGasFlowRateObj, row.standardGasFlowRateEntry,
+		designGaugePressureObj, row.designGaugePressureEntry,
+		designTemperatureObj, row.designTemperatureEntry,
 	)
 }

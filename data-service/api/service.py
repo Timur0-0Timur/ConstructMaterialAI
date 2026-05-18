@@ -4,6 +4,7 @@ import sys
 
 # импортируем наш новый легковесный сервис вместо тяжелого пайплайна
 from pipelines.api_pipeline import EquipmentAPIService, VesselAPIService, ConveyorAPIService, DrumAPIService, UTubeAPIService
+from domain.box_furnace_features import BoxFurnaceFeatureEngineer
 from configs.config_loader import config
 
 # добавляем корень проекта в sys.path для импорта ml_service
@@ -62,6 +63,9 @@ utube_predictor = UTubePredictor()
 
 # инициализируем предиктор для колонн
 tower_predictor = TowerPredictor()
+
+# инициализируем заглушку для коробчатых печей
+box_furnace_engineer = BoxFurnaceFeatureEngineer()
 
 def get_pump_estimation(input_data: dict) -> dict:
     """Прослойка между API и расчетами для насосов"""
@@ -213,4 +217,20 @@ def get_tower_estimation(input_data: dict) -> dict:
         }
     except Exception as e:
         logger.error(f"Ошибка в сервисе оценки колонны: {e}")
+        raise ValueError(f"Ошибка обработки данных: {str(e)}")
+
+def get_box_furnace_estimation(input_data: dict) -> dict:
+    """Прослойка между API и заглушкой расчета печи (Box Furnace)"""
+    try:
+        duty = input_data.get("duty", 0.0) or 0.0
+        gas_flow = input_data.get("standard_gas_flow_rate", 0.0) or 0.0
+
+        predicted_weight = box_furnace_engineer.calculate_stub_weight(duty, gas_flow)
+
+        return {
+            "weight": round(float(predicted_weight), 2),
+            "features": input_data
+        }
+    except Exception as e:
+        logger.error(f"Ошибка в сервисе оценки печи: {e}")
         raise ValueError(f"Ошибка обработки данных: {str(e)}")

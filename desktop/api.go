@@ -10,12 +10,13 @@ import (
 )
 
 const (
-	pumpBackendURL     = "http://localhost:8080/pump/estimate"
-	conveyorBackendURL = "http://localhost:8080/conveyor/estimate"
-	vesselBackendURL   = "http://localhost:8080/vessel/estimate"
-	drumBackendURL     = "http://localhost:8080/drum/estimate"
-	utubeBackendURL    = "http://localhost:8080/utube/estimate"
-	towerBackendURL    = "http://localhost:8080/tower/estimate"
+	pumpBackendURL       = "http://localhost:8080/pump/estimate"
+	conveyorBackendURL   = "http://localhost:8080/conveyor/estimate"
+	vesselBackendURL     = "http://localhost:8080/vessel/estimate"
+	drumBackendURL       = "http://localhost:8080/drum/estimate"
+	utubeBackendURL      = "http://localhost:8080/utube/estimate"
+	towerBackendURL      = "http://localhost:8080/tower/estimate"
+	boxFurnaceBackendURL = "http://localhost:8080/box_furnace/estimate"
 )
 // Запросы к бэкенду
 type PumpRequest struct {
@@ -95,6 +96,19 @@ type UTubeResponse struct {
 }
 
 type TowerResponse struct {
+	ModelVersion string  `json:"model_version"`
+	Weight       float64 `json:"weight"`
+}
+
+type BoxFurnaceRequest struct {
+	Tag                 string   `json:"tag"`
+	Duty                *float64 `json:"duty"`
+	StandardGasFlowRate *float64 `json:"standard_gas_flow_rate"`
+	DesignGaugePressure *float64 `json:"design_gauge_pressure,omitempty"`
+	DesignTemperature   *float64 `json:"design_temperature,omitempty"`
+}
+
+type BoxFurnaceResponse struct {
 	ModelVersion string  `json:"model_version"`
 	Weight       float64 `json:"weight"`
 }
@@ -279,6 +293,36 @@ func sendTowerToBackend(data TowerRequest) (float64, error) {
 	return towerResp.Weight, nil
 }
 
+func sendBoxFurnaceToBackend(data BoxFurnaceRequest) (float64, error) {
+	jsonBody, err := json.Marshal(data)
+	if err != nil {
+		return 0, fmt.Errorf("ошибка JSON: %w", err)
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Post(boxFurnaceBackendURL, "application/json", bytes.NewReader(jsonBody))
+	if err != nil {
+		return 0, fmt.Errorf("сетевая ошибка: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, fmt.Errorf("ошибка чтения ответа: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("сервер (%d): %s", resp.StatusCode, string(body))
+	}
+
+	var boxFurnaceResp BoxFurnaceResponse
+	if err := json.Unmarshal(body, &boxFurnaceResp); err != nil {
+		return 0, fmt.Errorf("ошибка разбора ответа: %w", err)
+	}
+
+	return boxFurnaceResp.Weight, nil
+}
+
 func sendEquipmentToBackend(eq Equipment) (float64, error) {
 	switch eq.Type {
 	case "Насосы":
@@ -343,6 +387,16 @@ func sendEquipmentToBackend(eq Equipment) (float64, error) {
 			NumberOfTrays:                eq.NumberOfTrays,
 		}
 		return sendTowerToBackend(req)
+
+	case "Коробчатая технологическая печь":
+		req := BoxFurnaceRequest{
+			Tag:                 eq.Tag,
+			Duty:                eq.Duty,
+			StandardGasFlowRate: eq.StandardGasFlowRate,
+			DesignGaugePressure: eq.DesignGaugePressure,
+			DesignTemperature:   eq.DesignTemperature,
+		}
+		return sendBoxFurnaceToBackend(req)
 
 	default:
 		return 0, fmt.Errorf("неизвестный тип оборудования: %s", eq.Type)
