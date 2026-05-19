@@ -22,10 +22,10 @@ class VesselFeatureEngineer:
             logger.info(f"Валидация: удалено {dropped} строк из-за отсутствия критических параметров.")
         return df
 
-    def add_physics_features(self, df: pd.DataFrame, is_inference: bool = False) -> pd.DataFrame:
+    def add_vessel_features(self, df: pd.DataFrame, is_inference: bool = False) -> pd.DataFrame:
         """Генерация физических признаков, необходимых для ML модели."""
-        logger.info("Расчет инженерных признаков для сосуда (v3)...")
-        
+        logger.info("Расчет инженерных признаков для сосуда...")
+
         # Получаем названия колонок из конфига или используем дефолтные
         col_names = self.config.get('col_names', {})
         c_diameter = col_names.get('diameter', 'diameter')
@@ -38,49 +38,36 @@ class VesselFeatureEngineer:
 
         df_out = df.copy()
 
-        # Приводим типы
-        for col in [c_diameter, c_ss_dist, c_pressure, c_sk_height, c_leg_height, c_temp]:
-            if col in df_out.columns:
-                df_out[col] = pd.to_numeric(df_out[col], errors='coerce')
-            else:
-                if col in [c_sk_height, c_leg_height]:
-                    df_out[col] = np.nan
-                else:
-                    df_out[col] = 0
-
         # А. Коррекция давления (MPa -> kPa)
         mask_mpa = (df_out[c_pressure] > 0) & (df_out[c_pressure] < 20)
         df_out.loc[mask_mpa, c_pressure] *= 1000
-        
+
         # Б. Абсолютное давление и заполнение пропусков
         df_out['p_abs'] = df_out[c_pressure].fillna(0) + 101.3
         df_out.loc[df_out['p_abs'] < 50, 'p_abs'] = 101.3
-        
+
         # В. Восстановление объема (геометрический расчет)
         if 'liq_volume' not in df_out.columns:
             df_out['liq_volume'] = np.nan
-            
+
         mask_vol = df_out['liq_volume'].isna() | (df_out['liq_volume'] <= 0)
-        df_out.loc[mask_vol, 'liq_volume'] = (np.pi * (df_out[c_diameter]**2) / 4) * df_out[c_ss_dist]
+        df_out.loc[mask_vol, 'liq_volume'] = (np.pi * (df_out[c_diameter] ** 2) / 4) * df_out[c_ss_dist]
 
         # Г. Новые физические признаки
         # Площадь поверхности (стенки + днища)
-        df_out['area_calc'] = (np.pi * df_out[c_diameter] * df_out[c_ss_dist]) + (1.5 * np.pi * (df_out[c_diameter]**2) / 4)
+        df_out['area_calc'] = (np.pi * df_out[c_diameter] * df_out[c_ss_dist]) + (
+                    1.5 * np.pi * (df_out[c_diameter] ** 2) / 4)
         # Прокси толщины стенки (P * D)
         df_out['thick_proxy'] = df_out['p_abs'] * df_out[c_diameter]
-        
+
         # Д. Опоры (бинарные признаки)
         df_out['has_skirt'] = df_out[c_sk_height].notna().astype(int)
         df_out['has_legs'] = df_out[c_leg_height].notna().astype(int)
         df_out[c_sk_height] = df_out[c_sk_height].fillna(0)
         df_out[c_leg_height] = df_out[c_leg_height].fillna(0)
-        
+
         # Маппинг температуры
         df_out['des_temp'] = df_out[c_temp].fillna(0)
-
-        # Е. Логарифмирование сильно смещенных величин
-        for col in ['liq_volume', c_diameter, c_ss_dist, 'p_abs', 'area_calc', 'thick_proxy']:
-            df_out[f'log_{col}'] = np.log1p(df_out[col])
 
         # Обработка целевой переменной (только для ML, не для инференса)
         if c_weight in df_out.columns:
@@ -89,35 +76,20 @@ class VesselFeatureEngineer:
                 if invalid_weight.sum() > 0:
                     logger.warning(f"Удаляем {invalid_weight.sum()} строк без целевой переменной (веса).")
                     df_out = df_out[~invalid_weight]
-                df_out['weight_kg_log'] = np.log(df_out[c_weight])
-                # Ж. Исправление веса (lbs -> kg) для ТРЕЙНА
-                df_out['weight_kg_log'] = df_out['weight_kg_log'] - np.log(2.20462)
             else:
                 invalid_input = df_out[c_weight] <= 0
                 if invalid_input.sum() > 0:
                     df_out.loc[invalid_input, c_weight] = np.nan
-                df_out['weight_kg_log'] = np.log(df_out[c_weight].astype(float))
-                
-            df_out = df_out.drop(columns=[c_weight], errors='ignore')
-
-        # Оставляем только нужные колонки
-        if f'log_{c_diameter}' != 'log_diameter':
-            df_out['log_diameter'] = df_out[f'log_{c_diameter}']
-        if f'log_{c_ss_dist}' != 'log_ss_distance':
-            df_out['log_ss_distance'] = df_out[f'log_{c_ss_dist}']
 
         required_cols = [
-            'log_liq_volume', 'log_diameter', 'log_ss_distance', 'log_p_abs', 
-            'log_area_calc', 'log_thick_proxy', 'des_temp', 
+            'liq_volume', 'diameter', 'ss_distance', 'p_abs',
+            'area_calc', 'thick_proxy', 'des_temp',
             'sk_height', 'leg_height', 'has_skirt', 'has_legs'
         ]
-        
+
         if 'tag' in df_out.columns:
             required_cols = ['tag'] + required_cols
-            
-        if 'weight_kg_log' in df_out.columns:
-            required_cols.append('weight_kg_log')
-            
+
         for col in required_cols:
             if col not in df_out.columns:
                 df_out[col] = 0
@@ -125,5 +97,5 @@ class VesselFeatureEngineer:
         result_cols = [col for col in required_cols if col in df_out.columns]
         df_out = df_out[result_cols]
 
-        logger.info('Расчет инженерных признаков для сосуда (v3) завершен.')
+        logger.info('Расчет инженерных признаков для сосуда завершен.')
         return df_out

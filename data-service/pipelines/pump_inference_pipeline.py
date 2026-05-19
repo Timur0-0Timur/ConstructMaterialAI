@@ -52,7 +52,8 @@ class PumpInferencePipeline(BaseETLPipeline):
                 df_merge[col] = pd.to_numeric(df_merge[col], errors='coerce')
 
         # 4. фильтрация
-        critical_cols = [raw['flow'], raw['head']]
+        clean_cols = self.config['col_names']
+        critical_cols = [clean_cols['flow'], clean_cols['head']]
         df_merge = self.feature_engineer.filter_critical_data(df_merge, critical_cols)
 
         # 5. обогащение (enriching)
@@ -70,6 +71,8 @@ class PumpInferencePipeline(BaseETLPipeline):
         except Exception as e:
             logger.error(f"Ошибка при обогащении: {e}")
 
+        logger.info("ФАКТИЧЕСКИЕ КОЛОНКИ: %s", df_merge.columns.tolist())
+
         # 6. физика
         df_merge = self.feature_engineer.add_physics_features(df_merge, is_inference=True)
 
@@ -85,6 +88,6 @@ if __name__ == '__main__':
         input_file_path=BASE_DIR / 'data' / 'Реальные насосные.xlsx',
         output_folder_path=BASE_DIR / 'datasets',
         config=pump_inf_config,
-        weight_file_path=BASE_DIR / 'data' / 'Реалные_насосные_альтернативный_лист_с_весом.xlsx'
+        weight_file_path=BASE_DIR / 'data' / 'Реалные_насосные_альтернативный_лист_с_весом.xlsx'
     )
     pipeline.run()

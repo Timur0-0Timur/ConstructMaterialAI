@@ -6,6 +6,9 @@ import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from configs.config_loader import config as global_config
+from sqlalchemy.pool import NullPool
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 logger = logging.getLogger(__name__)
 
@@ -46,9 +49,14 @@ class BaseETLPipeline:
 
     def _read_with_cache(self, excel_path: Path, sheet_name: str | int | None, cache_dir: Path, suffix: str) -> pd.DataFrame:
         """Универсальная функция чтения Excel с кэшированием (адаптированная версия)"""
+        # 1. приводим имя листа к строке
+        safe_sheet = str(sheet_name) if sheet_name is not None else "0"
+
+        # 2. заменяем пробелы на подчеркивания, чтобы пути файлов были чистыми
+        safe_sheet = safe_sheet.replace(" ", "_").replace("/", "-")
 
         # формируем путь к файлу на основе суффикса (features или weight)
-        cache_file = cache_dir / f'{excel_path.stem}_{suffix}.csv'
+        cache_file = cache_dir / f'{excel_path.stem}_{safe_sheet}_{suffix}.csv'
 
         try:
             # проверяем наличие xlsx файла
@@ -81,18 +89,21 @@ class BaseETLPipeline:
                 if isinstance(df_excel.columns, pd.MultiIndex):
                     flattened_cols = []
                     for col_tuple in df_excel.columns:
+                        # приводим к строке и убираем пробелы
                         lvl0 = str(col_tuple[0]).strip()
                         lvl1 = str(col_tuple[1]).strip()
 
-                        # проверка: является ли этаж "нормальным"
-                        def is_valid_name(name):
-                            return bool(name) and 'Unnamed' not in name and name.lower() != 'nan'
+                        # Зануляем технический мусор pandas
+                        if 'Unnamed' in lvl0 or lvl0.lower() == 'nan':
+                            lvl0 = ''
+                        if 'Unnamed' in lvl1 or lvl1.lower() == 'nan':
+                            lvl1 = ''
 
-                        # логика приоритета
-                        if is_valid_name(lvl0):
-                            final_name = lvl0
-                        elif is_valid_name(lvl1):
-                            final_name = lvl1
+                        # собираем финальное имя только из непустых частей
+                        parts = [p for p in [lvl0, lvl1] if p]
+
+                        if parts:
+                            final_name = " ".join(parts)
                         else:
                             final_name = f"Empty_Col_{len(flattened_cols)}"
 
@@ -135,7 +146,9 @@ class BaseETLPipeline:
         """сохранение готовых данных"""
         self.output_folder.mkdir(parents=True, exist_ok=True)
         df.to_csv(self.output_folder / filename, index=False)
-        logger.info(f'файлы сохранены: {filename}')
+        logger.info(f'Файлы сохранены: {filename}')
+        table_prefix = self.config['db_params']['table_prefix']
+        self.save_correlation_matrix(df, table_prefix + "_correlation")
 
     def load_to_db(self, df: pd.DataFrame) -> None:
         """Выгрузка готовых датасетов в PostgreSQL (Neon)"""
@@ -159,10 +172,27 @@ class BaseETLPipeline:
         engine_url = f"postgresql+psycopg2://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}?sslmode=require"
 
         try:
-            engine = create_engine(engine_url)
+            engine = create_engine(
+                engine_url,
+                poolclass=NullPool,  # Отключаем конфликт пулов
+                connect_args={
+                    "connect_timeout": 30,  # Даем базе 30 секунд на пробуждение
+                    "keepalives": 1,
+                    "keepalives_idle": 30,
+                    "keepalives_interval": 10,
+                    "keepalives_count": 5
+                }
+            )
 
             logger.info(f"Создаем таблицу {table_prefix}_ml и заливаем данные...")
-            df.to_sql(f"{table_prefix}_ml", engine, if_exists='replace', index=False)
+            df.to_sql(
+                name=f"{table_prefix}_ml",
+                con=engine,
+                if_exists='replace',
+                index=False,
+                chunksize=5000,  # отправляем по 5000 строк за раз
+                method='multi'  # собираем множественный INSERT для ускорения
+            )
 
             logger.info('Данные успешно сохранены в облачную БД Neon.')
 
@@ -184,3 +214,19 @@ class BaseETLPipeline:
         cols = self.config.get('col_names', {})
 
         return {raw[k]: cols[k] for k in raw.keys() if k in cols}
+
+    def save_correlation_matrix(self, df: pd.DataFrame, filename: str = 'correlation.png') -> None:
+        numeric_df = df.select_dtypes(include=['float64', 'int64'])
+        if numeric_df.empty:
+            logger.warning("Нет числовых данных для матрицы корреляции.")
+            return
+
+        plt.figure(figsize=(10, 8))
+        correlation_matrix = numeric_df.corr()
+        sns.heatmap(correlation_matrix, annot=True, cmap="coolwarm", fmt=".2f")
+
+        filepath = self.output_folder / filename
+        plt.savefig(filepath, bbox_inches='tight')
+        plt.close()
+
+        logger.info(f"Матрица корреляций сохранена в {filepath}")

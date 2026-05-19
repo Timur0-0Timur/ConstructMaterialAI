@@ -47,7 +47,11 @@ class PumpTrainingPipeline(BaseETLPipeline):
 
         # 4. удаление мусора и валидация
         df_merge = df_merge.dropna(subset=self.config['cols_to_convert']).reset_index(drop=True)
-        critical_cols = [raw['flow'], raw['head']]
+        clean_cols = self.config['col_names']
+        critical_cols = [clean_cols['flow'], clean_cols['head']]
+
+        logger.info("ФАКТИЧЕСКИЕ КОЛОНКИ: %s", df_merge.columns.tolist())
+
         df_merge = self.feature_engineer.filter_critical_data(df_merge, critical_cols)
 
         # 5. физика
