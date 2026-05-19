@@ -75,7 +75,7 @@ equipment:
       table_prefix: "pump_inference_data"
     sheets:
       features: "TAG_FEATURES"
-      weight: null
+      weight: "Equipment List"
     weight_col_to_drop:
       - "Name"
       - "Parent Area"
@@ -198,29 +198,90 @@ equipment:
       table_prefix: "vessel_data"
     sheets:
       features: "features"
-      weight: "weight"
+    raw_names:
+      tag: "User Tag number"
+      liq_volume: "Liquid volume"
+      diameter: "Vessel diameter"
+      ss_dist: "Vessel tangent to tangent height"
+      pressure: "Design gauge pressure"
+      temp: "Design temperature"
+      oper_temp: "Operating temperature"
+      sk_height: "Skirt height"
+      leg_height: "Vessel leg height"
+      weight_kg: "Weight"
+    col_names:
+      tag: "tag"
+      liq_volume: "liq_volume"
+      diameter: "diameter"
+      ss_dist: "ss_distance"
+      pressure: "pressure"
+      temp: "temp"
+      oper_temp: "oper_temp"
+      sk_height: "sk_height"
+      leg_height: "leg_height"
+      weight_kg: "weight_kg"
+    cols_to_convert:
+      - "liq_volume"
+      - "diameter"
+      - "ss_distance"
+      - "pressure"
+      - "temp"
+      - "oper_temp"
+      - "sk_height"
+      - "leg_height"
+      - "weight_kg"
+
+  utube_heat_ml:
+    db_params:
+      table_prefix: "utube_heat_data"
+    sheets:
+      features: "Лист1"
+    raw_names:
+      tag: "User Tag number"
+      heat_area: "Heat transfer area"
+      tube_des_pres: "Tube design gauge pressure"
+      tube_out_diameter: "Tube outside diameter"
+      tube_len: "Tube length extended"
+      shell_diameter: "Shell diameter"
+      weight_kg: "Weight"
+    col_names:
+      tag: "tag"
+      heat_area: "heat_area"
+      tube_des_pres: "tube_des_pres"
+      tube_out_diameter: "tube_out_diameter"
+      tube_len: "tube_len"
+      shell_diameter: "shell_diameter"
+      weight_kg: "weight_kg"
+    cols_to_convert:
+      - "heat_area"
+      - "tube_des_pres"
+      - "tube_out_diameter"
+      - "tube_len"
+      - "shell_diameter"
+      - "weight_kg"
+
+  tower_ml:
+    db_params:
+      table_prefix: "tower_data"
+    sheets:
+      features: "Лист1"
     raw_names:
       tag: "User Tag number"
       diameter: "Vessel diameter"
       ss_dist: "Vessel tangent to tangent height"
       pressure: "Design gauge pressure"
-      temp: "Design temperature"
+      trays_num: "Number of trays"
       weight_kg: "Weight"
-      tag_weight: "Tag"
     col_names:
       tag: "tag"
       diameter: "diameter"
-      ss_dist: "ss_distance"
+      ss_dist: "ss_dist"
       pressure: "pressure"
-      temp: "temp"
+      trays_num: "trays_num"
       weight_kg: "weight_kg"
     cols_to_convert:
       - "diameter"
-      - "ss_distance"
+      - "ss_dist"
       - "pressure"
-      - "temp"
+      - "trays_num"
       - "weight_kg"
-    feat_eng:
-      volume_proxy: "volume_proxy"
-      pressure_factor: "pressure_factor"
-      weight_log: "weight_log"
