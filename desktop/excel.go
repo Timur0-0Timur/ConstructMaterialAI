@@ -17,13 +17,14 @@ const (
 	sheetDrums       = "Горизонтальные емкости"
 	sheetUTubes      = "Трубчатые теплообменники"
 	sheetTower       = "Тарельчатые колонны"
-	sheetBoxFurnaces = "Коробчатые печи"
-	sheetTitlePage   = "Титульный лист"
-	defaultSheetFix  = "Sheet1" // excelize создаёт Sheet1 по умолчанию
+	sheetBoxFurnaces  = "Коробчатые печи"
+	sheetCompressors  = "Центробежные компрессоры"
+	sheetTitlePage    = "Титульный лист"
+	defaultSheetFix   = "Sheet1" // excelize создаёт Sheet1 по умолчанию
 )
 
 // Порядок листов
-var sheetOrder = []string{sheetPumps, sheetConveyor, sheetVessels, sheetDrums, sheetUTubes, sheetTower, sheetBoxFurnaces}
+var sheetOrder = []string{sheetPumps, sheetConveyor, sheetVessels, sheetDrums, sheetUTubes, sheetTower, sheetBoxFurnaces, sheetCompressors}
 
 // Заголовки для каждого листа.
 // Флаг required — обязательна ли колонка.
@@ -105,6 +106,16 @@ var boxFurnaceColumns = []colDef{
 	{"Вес (кг)", false},
 }
 
+var compressorColumns = []colDef{
+	{"Тэг", true},
+	{"Кол-во", true},
+	{"Расход на всасывании", true},
+	{"Давл. всасыв. (кПа)", true},
+	{"Давл. нагнет. (кПа)", true},
+	{"Мощность привода", false},
+	{"Вес (кг)", false},
+}
+
 func columnsForSheet(sheet string) []colDef {
 	switch sheet {
 	case sheetPumps:
@@ -121,6 +132,8 @@ func columnsForSheet(sheet string) []colDef {
 		return towerColumns
 	case sheetBoxFurnaces:
 		return boxFurnaceColumns
+	case sheetCompressors:
+		return compressorColumns
 	}
 	return nil
 }
@@ -205,6 +218,8 @@ func createTitlePage(f *excelize.File, equipment []Equipment) error {
 			sName = sheetTower
 		case "Коробчатая технологическая печь":
 			sName = sheetBoxFurnaces
+		case "Центробежный компрессор":
+			sName = sheetCompressors
 		}
 		if sName != "" {
 			weightsByType[sName] += w
@@ -353,6 +368,7 @@ func exportProject(filePath string, equipment []Equipment) error {
 		sheetUTubes:      2,
 		sheetTower:       2,
 		sheetBoxFurnaces: 2,
+		sheetCompressors: 2,
 	}
 
 	for _, eq := range equipment {
@@ -372,6 +388,8 @@ func exportProject(filePath string, equipment []Equipment) error {
 			sheet = sheetTower
 		case "Коробчатая технологическая печь":
 			sheet = sheetBoxFurnaces
+		case "Центробежный компрессор":
+			sheet = sheetCompressors
 		default:
 			continue
 		}
@@ -446,6 +464,15 @@ func exportProject(filePath string, equipment []Equipment) error {
 			setCellOptFloat(f, sheet, 4, row, eq.StandardGasFlowRate)
 			setCellOptFloat(f, sheet, 5, row, eq.DesignGaugePressure)
 			setCellOptFloat(f, sheet, 6, row, eq.DesignTemperature)
+			if eq.CalculatedWeight > 0 {
+				setCell(f, sheet, 7, row, eq.CalculatedWeight)
+			}
+
+		case "Центробежный компрессор":
+			setCellOptFloat(f, sheet, 3, row, eq.ActualGasFlowRateInlet)
+			setCellOptFloat(f, sheet, 4, row, eq.DesignGaugePressureInlet)
+			setCellOptFloat(f, sheet, 5, row, eq.DesignGaugePressureOutlet)
+			setCellOptFloat(f, sheet, 6, row, eq.DriverPower)
 			if eq.CalculatedWeight > 0 {
 				setCell(f, sheet, 7, row, eq.CalculatedWeight)
 			}
@@ -642,14 +669,25 @@ func importProject(filePath string) ([]Equipment, []ImportError) {
 
 			case sheetBoxFurnaces:
 				eq.Type = "Коробчатая технологическая печь"
-				// Тепловая мощность (C, обязательный)
 				eq.Duty, hasError = parseImportFloat(cells, 2, cols, sheet, excelRow, true, &errors, hasError)
-				// Расход сырья (D, обязательный)
 				eq.StandardGasFlowRate, hasError = parseImportFloat(cells, 3, cols, sheet, excelRow, true, &errors, hasError)
-				// Давление змеевика (E, опциональный)
 				eq.DesignGaugePressure, hasError = parseImportFloat(cells, 4, cols, sheet, excelRow, false, &errors, hasError)
-				// Температура (F, опциональный)
 				eq.DesignTemperature, hasError = parseImportFloat(cells, 5, cols, sheet, excelRow, false, &errors, hasError)
+				weight, _ := parseImportFloat(cells, 6, cols, sheet, excelRow, false, &errors, hasError)
+				if weight != nil {
+					eq.CalculatedWeight = *weight
+				}
+
+			case sheetCompressors:
+				eq.Type = "Центробежный компрессор"
+				// Расход (C, обязательный)
+				eq.ActualGasFlowRateInlet, hasError = parseImportFloat(cells, 2, cols, sheet, excelRow, true, &errors, hasError)
+				// Давление всасыв. (D, обязательный)
+				eq.DesignGaugePressureInlet, hasError = parseImportFloat(cells, 3, cols, sheet, excelRow, true, &errors, hasError)
+				// Давление нагнет. (E, обязательный)
+				eq.DesignGaugePressureOutlet, hasError = parseImportFloat(cells, 4, cols, sheet, excelRow, true, &errors, hasError)
+				// Мощность привода (F, опциональный)
+				eq.DriverPower, hasError = parseImportFloat(cells, 5, cols, sheet, excelRow, false, &errors, hasError)
 				// Вес (G, опциональный)
 				weight, _ := parseImportFloat(cells, 6, cols, sheet, excelRow, false, &errors, hasError)
 				if weight != nil {

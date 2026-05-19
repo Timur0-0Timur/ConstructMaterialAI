@@ -16,7 +16,8 @@ const (
 	drumBackendURL       = "http://localhost:8080/drum/estimate"
 	utubeBackendURL      = "http://localhost:8080/utube/estimate"
 	towerBackendURL      = "http://localhost:8080/tower/estimate"
-	boxFurnaceBackendURL = "http://localhost:8080/box_furnace/estimate"
+	boxFurnaceBackendURL            = "http://localhost:8080/box_furnace/estimate"
+	centrifugalCompressorBackendURL = "http://localhost:8080/centrifugal_compressor/estimate"
 )
 // Запросы к бэкенду
 type PumpRequest struct {
@@ -109,6 +110,19 @@ type BoxFurnaceRequest struct {
 }
 
 type BoxFurnaceResponse struct {
+	ModelVersion string  `json:"model_version"`
+	Weight       float64 `json:"weight"`
+}
+
+type CentrifugalCompressorRequest struct {
+	Tag                       string   `json:"tag"`
+	ActualGasFlowRateInlet    *float64 `json:"actual_gas_flow_rate_inlet"`
+	DesignGaugePressureInlet  *float64 `json:"design_gauge_pressure_inlet"`
+	DesignGaugePressureOutlet *float64 `json:"design_gauge_pressure_outlet"`
+	DriverPower               *float64 `json:"driver_power,omitempty"`
+}
+
+type CentrifugalCompressorResponse struct {
 	ModelVersion string  `json:"model_version"`
 	Weight       float64 `json:"weight"`
 }
@@ -398,7 +412,47 @@ func sendEquipmentToBackend(eq Equipment) (float64, error) {
 		}
 		return sendBoxFurnaceToBackend(req)
 
+	case "Центробежный компрессор":
+		req := CentrifugalCompressorRequest{
+			Tag:                       eq.Tag,
+			ActualGasFlowRateInlet:    eq.ActualGasFlowRateInlet,
+			DesignGaugePressureInlet:  eq.DesignGaugePressureInlet,
+			DesignGaugePressureOutlet: eq.DesignGaugePressureOutlet,
+			DriverPower:               eq.DriverPower,
+		}
+		return sendCentrifugalCompressorToBackend(req)
+
 	default:
 		return 0, fmt.Errorf("неизвестный тип оборудования: %s", eq.Type)
 	}
+}
+
+func sendCentrifugalCompressorToBackend(data CentrifugalCompressorRequest) (float64, error) {
+	jsonBody, err := json.Marshal(data)
+	if err != nil {
+		return 0, fmt.Errorf("ошибка JSON: %w", err)
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Post(centrifugalCompressorBackendURL, "application/json", bytes.NewReader(jsonBody))
+	if err != nil {
+		return 0, fmt.Errorf("сетевая ошибка: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, fmt.Errorf("ошибка чтения ответа: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("сервер (%d): %s", resp.StatusCode, string(body))
+	}
+
+	var compResp CentrifugalCompressorResponse
+	if err := json.Unmarshal(body, &compResp); err != nil {
+		return 0, fmt.Errorf("ошибка разбора ответа: %w", err)
+	}
+
+	return compResp.Weight, nil
 }

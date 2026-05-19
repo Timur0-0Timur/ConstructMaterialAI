@@ -5,6 +5,7 @@ import sys
 # импортируем наш новый легковесный сервис вместо тяжелого пайплайна
 from pipelines.api_pipeline import EquipmentAPIService, VesselAPIService, ConveyorAPIService, DrumAPIService, UTubeAPIService
 from domain.box_furnace_features import BoxFurnaceFeatureEngineer
+from domain.centrifugal_compressor_features import CentrifugalCompressorFeatureEngineer
 from configs.config_loader import config
 
 # добавляем корень проекта в sys.path для импорта ml_service
@@ -66,6 +67,9 @@ tower_predictor = TowerPredictor()
 
 # инициализируем заглушку для коробчатых печей
 box_furnace_engineer = BoxFurnaceFeatureEngineer()
+
+# инициализируем заглушку для центробежных компрессоров
+compressor_engineer = CentrifugalCompressorFeatureEngineer()
 
 def get_pump_estimation(input_data: dict) -> dict:
     """Прослойка между API и расчетами для насосов"""
@@ -233,4 +237,21 @@ def get_box_furnace_estimation(input_data: dict) -> dict:
         }
     except Exception as e:
         logger.error(f"Ошибка в сервисе оценки печи: {e}")
+        raise ValueError(f"Ошибка обработки данных: {str(e)}")
+
+def get_centrifugal_compressor_estimation(input_data: dict) -> dict:
+    """Прослойка между API и заглушкой расчета компрессора (Centrifugal Compressor)"""
+    try:
+        gas_flow = input_data.get("actual_gas_flow_rate_inlet", 0.0) or 0.0
+        p_inlet = input_data.get("design_gauge_pressure_inlet", 0.0) or 0.0
+        p_outlet = input_data.get("design_gauge_pressure_outlet", 0.0) or 0.0
+
+        predicted_weight = compressor_engineer.calculate_stub_weight(gas_flow, p_inlet, p_outlet)
+
+        return {
+            "weight": round(float(predicted_weight), 2),
+            "features": input_data
+        }
+    except Exception as e:
+        logger.error(f"Ошибка в сервисе оценки компрессора: {e}")
         raise ValueError(f"Ошибка обработки данных: {str(e)}")

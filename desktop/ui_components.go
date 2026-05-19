@@ -91,6 +91,15 @@ type equipmentRow struct {
 	standardGasFlowRateLabel *canvas.Text
 	standardGasFlowRateEntry *widget.Entry
 
+	actualGasFlowRateInletLabel    *canvas.Text
+	actualGasFlowRateInletEntry    *widget.Entry
+	designGaugePressureInletLabel  *canvas.Text
+	designGaugePressureInletEntry  *widget.Entry
+	designGaugePressureOutletLabel *canvas.Text
+	designGaugePressureOutletEntry *widget.Entry
+	driverPowerLabel               *canvas.Text
+	driverPowerEntry               *widget.Entry
+
 	fieldsContainer *fyne.Container
 	resultLabel     *widget.Label
 	expandBtn       *widget.Button
@@ -153,6 +162,8 @@ func (r *equipmentRow) refreshTheme() {
 		r.shellDiameterLabel, r.tubeOutDiameterLabel, r.tubeLenLabel,
 		r.tubeDesPresLabel, r.heatAreaLabel,
 		r.dutyLabel, r.standardGasFlowRateLabel,
+		r.actualGasFlowRateInletLabel, r.designGaugePressureInletLabel,
+		r.designGaugePressureOutletLabel, r.driverPowerLabel,
 	}
 	for _, l := range labels {
 		if l != nil {
@@ -355,6 +366,33 @@ func (r *equipmentRow) collectEquipment() (Equipment, error) {
 			r.markFieldInvalid(r.designTemperatureEntry, r.designTemperatureLabel, true)
 		}
 
+	case "Центробежный компрессор":
+		gasFlow, err := parseOptionalFloat(r.actualGasFlowRateInletEntry.Text)
+		if err != nil || gasFlow == nil {
+			r.markFieldInvalid(r.actualGasFlowRateInletEntry, r.actualGasFlowRateInletLabel, true)
+			return eq, fmt.Errorf("Расход на всасывании обязателен")
+		}
+		eq.ActualGasFlowRateInlet = gasFlow
+
+		pInlet, err := parseOptionalFloat(r.designGaugePressureInletEntry.Text)
+		if err != nil || pInlet == nil {
+			r.markFieldInvalid(r.designGaugePressureInletEntry, r.designGaugePressureInletLabel, true)
+			return eq, fmt.Errorf("Давление на всасывании обязательно")
+		}
+		eq.DesignGaugePressureInlet = pInlet
+
+		pOutlet, err := parseOptionalFloat(r.designGaugePressureOutletEntry.Text)
+		if err != nil || pOutlet == nil {
+			r.markFieldInvalid(r.designGaugePressureOutletEntry, r.designGaugePressureOutletLabel, true)
+			return eq, fmt.Errorf("Давление нагнетания обязательно")
+		}
+		eq.DesignGaugePressureOutlet = pOutlet
+
+		eq.DriverPower, err = parseOptionalFloat(r.driverPowerEntry.Text)
+		if err != nil {
+			r.markFieldInvalid(r.driverPowerEntry, r.driverPowerLabel, true)
+		}
+
 	case "Трубчатый теплообменник":
 		shellDiameter, err := parseOptionalFloat(r.shellDiameterEntry.Text)
 		if err != nil || shellDiameter == nil {
@@ -535,6 +573,8 @@ func (r *equipmentRow) clearValidation() {
 		r.shellDiameterEntry, r.tubeOutDiameterEntry, r.tubeLenEntry,
 		r.tubeDesPresEntry, r.heatAreaEntry,
 		r.dutyEntry, r.standardGasFlowRateEntry,
+		r.actualGasFlowRateInletEntry, r.designGaugePressureInletEntry,
+		r.designGaugePressureOutletEntry, r.driverPowerEntry,
 	}
 	for _, e := range entries {
 		if e != nil {
@@ -565,6 +605,10 @@ func (r *equipmentRow) clearValidation() {
 	setLabelError(r.heatAreaLabel, false)
 	setLabelError(r.dutyLabel, false)
 	setLabelError(r.standardGasFlowRateLabel, false)
+	setLabelError(r.actualGasFlowRateInletLabel, false)
+	setLabelError(r.designGaugePressureInletLabel, false)
+	setLabelError(r.designGaugePressureOutletLabel, false)
+	setLabelError(r.driverPowerLabel, false)
 }
 func buildPumpFields(row *equipmentRow) *fyne.Container {
 	flowLabel, flowObj := createLabel("Расход (м³/ч):", true)
@@ -939,5 +983,54 @@ func buildBoxFurnaceFields(row *equipmentRow) *fyne.Container {
 		standardGasFlowRateObj, row.standardGasFlowRateEntry,
 		designGaugePressureObj, row.designGaugePressureEntry,
 		designTemperatureObj, row.designTemperatureEntry,
+	)
+}
+
+func buildCentrifugalCompressorFields(row *equipmentRow) *fyne.Container {
+	gasFlowLabel, gasFlowObj := createLabel("Расход на всасывании:", true)
+	row.actualGasFlowRateInletLabel = gasFlowLabel
+	row.actualGasFlowRateInletEntry = widget.NewEntry()
+	row.actualGasFlowRateInletEntry.SetPlaceHolder("Введите расход (обязательно)")
+	row.actualGasFlowRateInletEntry.OnChanged = func(s string) {
+		val, err := parseOptionalFloat(s)
+		row.markFieldInvalid(row.actualGasFlowRateInletEntry, row.actualGasFlowRateInletLabel, err != nil || val == nil)
+		row.dataChanged(true)
+	}
+
+	pInletLabel, pInletObj := createLabel("Давление на всасывании (кПа):", true)
+	row.designGaugePressureInletLabel = pInletLabel
+	row.designGaugePressureInletEntry = widget.NewEntry()
+	row.designGaugePressureInletEntry.SetPlaceHolder("Введите давление (обязательно)")
+	row.designGaugePressureInletEntry.OnChanged = func(s string) {
+		val, err := parseOptionalFloat(s)
+		row.markFieldInvalid(row.designGaugePressureInletEntry, row.designGaugePressureInletLabel, err != nil || val == nil)
+		row.dataChanged(true)
+	}
+
+	pOutletLabel, pOutletObj := createLabel("Давление нагнетания (кПа):", true)
+	row.designGaugePressureOutletLabel = pOutletLabel
+	row.designGaugePressureOutletEntry = widget.NewEntry()
+	row.designGaugePressureOutletEntry.SetPlaceHolder("Введите давление (обязательно)")
+	row.designGaugePressureOutletEntry.OnChanged = func(s string) {
+		val, err := parseOptionalFloat(s)
+		row.markFieldInvalid(row.designGaugePressureOutletEntry, row.designGaugePressureOutletLabel, err != nil || val == nil)
+		row.dataChanged(true)
+	}
+
+	driverPowerLabel, driverPowerObj := createLabel("Мощность привода:", false)
+	row.driverPowerLabel = driverPowerLabel
+	row.driverPowerEntry = widget.NewEntry()
+	row.driverPowerEntry.SetPlaceHolder("Мощность")
+	row.driverPowerEntry.OnChanged = func(s string) {
+		_, err := parseOptionalFloat(s)
+		row.markFieldInvalid(row.driverPowerEntry, row.driverPowerLabel, err != nil)
+		row.dataChanged(true)
+	}
+
+	return container.New(layout.NewFormLayout(),
+		gasFlowObj, row.actualGasFlowRateInletEntry,
+		pInletObj, row.designGaugePressureInletEntry,
+		pOutletObj, row.designGaugePressureOutletEntry,
+		driverPowerObj, row.driverPowerEntry,
 	)
 }

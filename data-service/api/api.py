@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional, Any, Dict
 
-from .service import get_pump_estimation, get_vessel_estimation, get_conveyor_estimation, get_drum_estimation, get_utube_estimation, get_tower_estimation, get_box_furnace_estimation
+from .service import get_pump_estimation, get_vessel_estimation, get_conveyor_estimation, get_drum_estimation, get_utube_estimation, get_tower_estimation, get_box_furnace_estimation, get_centrifugal_compressor_estimation
 
 app = FastAPI(title="Pump Data/ML Service", version="1.0.0")
 
@@ -86,6 +86,14 @@ class BoxFurnaceRequest(BaseModel):
     standard_gas_flow_rate: float = Field(..., gt=0)         # Обязательный, > 0
     design_gauge_pressure: Optional[float] = Field(default=None, ge=0)
     design_temperature: Optional[float] = Field(default=None)
+
+
+class CentrifugalCompressorRequest(BaseModel):
+    tag: str = Field(..., min_length=1)
+    actual_gas_flow_rate_inlet: float = Field(..., gt=0)      # Обязательный, > 0
+    design_gauge_pressure_inlet: float = Field(..., gt=0)      # Обязательный, > 0
+    design_gauge_pressure_outlet: float = Field(..., gt=0)     # Обязательный, > 0
+    driver_power: Optional[float] = Field(default=None, ge=0)
 
 # ---------- RESPONSE MODEL ----------
 
@@ -194,6 +202,20 @@ def box_furnace_estimate(req: BoxFurnaceRequest):
     try:
         input_data = req.model_dump()
         result = get_box_furnace_estimation(input_data)
+
+        return Response(
+            model_version=MODEL_VERSION,
+            weight=result["weight"],
+            debug_features=result["features"]
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/centrifugal_compressor/estimate", response_model=Response)
+def centrifugal_compressor_estimate(req: CentrifugalCompressorRequest):
+    try:
+        input_data = req.model_dump()
+        result = get_centrifugal_compressor_estimation(input_data)
 
         return Response(
             model_version=MODEL_VERSION,

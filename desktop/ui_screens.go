@@ -655,6 +655,8 @@ func showProject(w fyne.Window, projectName string) {
 			return buildTowerFields(row)
 		case "Коробчатая технологическая печь":
 			return buildBoxFurnaceFields(row)
+		case "Центробежный компрессор":
+			return buildCentrifugalCompressorFields(row)
 		default:
 			return container.NewVBox(widget.NewLabel("Неизвестный тип оборудования"))
 		}
@@ -742,6 +744,11 @@ func showProject(w fyne.Window, projectName string) {
 			row.standardGasFlowRateEntry.SetText(floatPtrToStr(eq.StandardGasFlowRate))
 			row.designGaugePressureEntry.SetText(floatPtrToStr(eq.DesignGaugePressure))
 			row.designTemperatureEntry.SetText(floatPtrToStr(eq.DesignTemperature))
+		case "Центробежный компрессор":
+			row.actualGasFlowRateInletEntry.SetText(floatPtrToStr(eq.ActualGasFlowRateInlet))
+			row.designGaugePressureInletEntry.SetText(floatPtrToStr(eq.DesignGaugePressureInlet))
+			row.designGaugePressureOutletEntry.SetText(floatPtrToStr(eq.DesignGaugePressureOutlet))
+			row.driverPowerEntry.SetText(floatPtrToStr(eq.DriverPower))
 		}
 
 		calcBtn := widget.NewButtonWithIcon("Рассчитать", theme.ConfirmIcon(), func() {

@@ -40,6 +40,12 @@ type Equipment struct {
 	Duty                *float64 `json:"duty,omitempty"`
 	StandardGasFlowRate *float64 `json:"standard_gas_flow_rate,omitempty"`
 
+	// Центробежный компрессор (Centrifugal Compressor)
+	ActualGasFlowRateInlet    *float64 `json:"actual_gas_flow_rate_inlet,omitempty"`
+	DesignGaugePressureInlet  *float64 `json:"design_gauge_pressure_inlet,omitempty"`
+	DesignGaugePressureOutlet *float64 `json:"design_gauge_pressure_outlet,omitempty"`
+	DriverPower               *float64 `json:"driver_power,omitempty"`
+
 	CalculatedWeight float64 `json:"calculated_weight"`
 }
 
