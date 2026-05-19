@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -69,7 +70,8 @@ func DrumHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	endpoint := "http://localhost:8000/drum/estimate"
+	mlURL := os.Getenv("ML_URL")
+	endpoint := mlURL + "/drum/estimate"
 	httpReq, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

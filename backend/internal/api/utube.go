@@ -6,16 +6,17 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"time"
 )
 
 type UTubeRequest struct {
-	Tag              string   `json:"tag"`
-	ShellDiameter    *float64 `json:"shell_diameter"`
-	TubeOutDiameter  *float64 `json:"tube_out_diameter"`
-	TubeLen          *float64 `json:"tube_len"`
-	TubeDesPres      *float64 `json:"tube_des_pres,omitempty"`
-	HeatArea         *float64 `json:"heat_area,omitempty"`
+	Tag             string   `json:"tag"`
+	ShellDiameter   *float64 `json:"shell_diameter"`
+	TubeOutDiameter *float64 `json:"tube_out_diameter"`
+	TubeLen         *float64 `json:"tube_len"`
+	TubeDesPres     *float64 `json:"tube_des_pres,omitempty"`
+	HeatArea        *float64 `json:"heat_area,omitempty"`
 }
 
 func UTubeHandler(w http.ResponseWriter, r *http.Request) {
@@ -73,7 +74,8 @@ func UTubeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	endpoint := "http://localhost:8000/utube/estimate"
+	mlURL := os.Getenv("ML_URL")
+	endpoint := mlURL + "/utube/estimate"
 	httpReq, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
