@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -70,7 +71,8 @@ func VesselHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	endpoint := "http://localhost:8000/vessel/estimate"
+	mlURl := os.Getenv("ML_URL")
+	endpoint := mlURl + "/vessel/estimate"
 	httpReq, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

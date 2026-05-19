@@ -6,6 +6,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -73,7 +74,8 @@ func ExcelHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	endpoint := "http://192.168.1.151:8000/ingest"
+	mlURL := os.Getenv("ML_URL")
+	endpoint := mlURL + "/ingest"
 	req, err := http.NewRequest(http.MethodPost, endpoint, &buf)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

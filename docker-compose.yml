@@ -1,0 +1,50 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: constructmaterialai-db
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: constructmaterialai
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d constructmaterialai"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  data-service:
+    build:
+      context: .
+      dockerfile: data-service/Dockerfile
+    container_name: constructmaterialai-data-service
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\""]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: constructmaterialai-backend
+    ports:
+      - "8080:8080"
+    environment:
+      ML_URL: "http://data-service:8000"
+      DATABASE_URL: "postgres://app:app@db:5432/constructmaterialai?sslmode=disable"
+      JWT_SECRET: "dev-secret-change-me"
+    depends_on:
+      db:
+        condition: service_healthy
+      data-service:
+        condition: service_healthy
+
+volumes:
+  pgdata:

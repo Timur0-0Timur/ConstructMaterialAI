@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -69,7 +70,8 @@ func PumpHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	endpoint := "http://127.0.0.1:8000/pump/estimate"
+	mlURL := os.Getenv("ML_URL")
+	endpoint := mlURL + "/pump/estimate"
 	httpReq, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
