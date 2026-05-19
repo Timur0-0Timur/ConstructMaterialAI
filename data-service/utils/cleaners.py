@@ -14,8 +14,8 @@ def vectorized_numeric_clean(series: pd.Series) -> pd.Series:
     s = s.str.replace(',', '.', regex=False)
 
     # извлекаем число (включая отрицательные) + опциональную дробную часть + опциональную e-экспоненту
-    s = s.str.extract(r'(-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)', expand=False)
-
+    # добавили (?<![a-zA-Zа-яА-ЯёЁ\^]) — запрет на буквы латиницы, кириллицы и символ ^ перед цифрой
+    s = s.str.extract(r'(?<![a-zA-Zа-яА-ЯёЁ\^])(-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)', expand=False)
     return s
 
 def clean_vessel_data(df: pd.DataFrame, config) -> pd.DataFrame:

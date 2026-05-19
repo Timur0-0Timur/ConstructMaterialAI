@@ -285,3 +285,29 @@ equipment:
       - "pressure"
       - "trays_num"
       - "weight_kg"
+
+  compressor_ml:
+    db_params:
+      table_prefix: "compressor_data"
+    sheets:
+      features: "Лист1"
+    raw_names:
+      tag: "User Tag number"
+      flow_rate: "Actual gas flow rate Inlet"
+      des_pres_in: "Design gauge pressure Inlet"
+      des_pres_out: "Design gauge pressure Outlet"
+      power: "Driver power"
+      weight_kg: "Weight"
+    col_names:
+      tag: "tag"
+      flow_rate: "flow_rate"
+      des_pres_in: "des_pres_in"
+      des_pres_out: "des_pres_out"
+      power: "power"
+      weight_kg: "weight_kg"
+    cols_to_convert:
+      - "flow_rate"
+      - "des_pres_in"
+      - "des_pres_out"
+      - "power"
+      - "weight_kg"
