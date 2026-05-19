@@ -1,6 +1,9 @@
 package httpapi
 
-import "net/http"
+import (
+	"constructmaterialai/internal/auth"
+	"net/http"
+)
 
 // RegisterRoutes регистрирует все эндпоинты API.
 func RegisterRoutes(mux *http.ServeMux) {
@@ -11,4 +14,18 @@ func RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/drum/estimate", DrumHandler)
 	mux.HandleFunc("/vessel/estimate", VesselHandler)
 	mux.HandleFunc("/conveyor/estimate", ConveyorHandler)
+	mux.HandleFunc("/utube/estimate", UTubeHandler)
+	mux.HandleFunc("/tower/estimate", TowerHandler)
+
+	// Авторизация
+	mux.HandleFunc("/api/auth/register", RegisterHandler)
+	mux.HandleFunc("/api/auth/login", LoginHandler)
+
+	// Проекты (защищенные)
+	mux.Handle("/api/projects", auth.AuthMiddleware(http.HandlerFunc(ProjectsHandler)))
+	mux.Handle("/api/projects/", auth.AuthMiddleware(http.HandlerFunc(ProjectByIDHandler)))
+
+	// Команды (защищенные)
+	mux.Handle("/api/teams", auth.AuthMiddleware(http.HandlerFunc(TeamsHandler)))
+	mux.Handle("/api/teams/", auth.AuthMiddleware(http.HandlerFunc(TeamsSubHandler)))
 }

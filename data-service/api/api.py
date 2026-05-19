@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional, Any, Dict
 
-from .service import get_pump_estimation, get_vessel_estimation, get_conveyor_estimation
+from .service import get_pump_estimation, get_vessel_estimation, get_conveyor_estimation, get_drum_estimation, get_utube_estimation, get_tower_estimation
 
 app = FastAPI(title="Pump Data/ML Service", version="1.0.0")
 
@@ -59,6 +59,26 @@ class ConveyorRequest(BaseModel):
     number_of_walkways: Optional[float] = Field(default=None, ge=0)          # допускаем 0
 
 
+class UTubeRequest(BaseModel):
+    tag: str = Field(..., min_length=1)
+    shell_diameter: float = Field(..., gt=0)
+    tube_out_diameter: float = Field(..., gt=0)
+    tube_len: float = Field(..., gt=0)
+
+    # опциональные
+    tube_des_pres: Optional[float] = Field(default=None, ge=0)
+    heat_area: Optional[float] = Field(default=None, ge=0)
+
+
+class TowerRequest(BaseModel):
+    tag: str = Field(..., min_length=1)
+    vessel_diameter: float = Field(..., gt=0)
+    number_of_trays: float = Field(..., ge=0)
+    
+    # опциональные
+    design_tangent_to_tangent_length: Optional[float] = Field(default=None, ge=0)
+    design_gauge_pressure: Optional[float] = Field(default=None)
+
 # ---------- RESPONSE MODEL ----------
 
 class Response(BaseModel):
@@ -93,11 +113,12 @@ def pump_estimate(req: PumpRequest):
 def drum_estimate(req: DrumRequest):
     try:
         input_data = req.model_dump()
-        # TODO: здесь позже будет вызов модели для drum
+        result = get_drum_estimation(input_data)
+
         return Response(
             model_version=MODEL_VERSION,
-            weight=8008.0,               # заглушка
-            debug_features=input_data     # чтобы видеть, что пришло
+            weight=result["weight"],
+            debug_features=result["features"]
         )
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -131,3 +152,32 @@ def conveyor_estimate(req: ConveyorRequest):
         )
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/utube/estimate", response_model=Response)
+def utube_estimate(req: UTubeRequest):
+    try:
+        input_data = req.model_dump()
+        result = get_utube_estimation(input_data)
+
+        return Response(
+            model_version=MODEL_VERSION,
+            weight=result["weight"],
+            debug_features=result["features"]
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/tower/estimate", response_model=Response)
+def tower_estimate(req: TowerRequest):
+    try:
+        input_data = req.model_dump()
+        result = get_tower_estimation(input_data)
+
+        return Response(
+            model_version=MODEL_VERSION,
+            weight=result["weight"],
+            debug_features=result["features"]
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
